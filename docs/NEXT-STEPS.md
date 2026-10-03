@@ -20,6 +20,10 @@ The no-key room now includes a three-step Impossible Room route: collision-note 
 
 The law prompt now supports deterministic no-key interpretations for alternate gravity, collision-note, and freeze phrasing. Proposals remain inspectable until explicit approval. A bounded event ledger records law applications, impact notes, freeze expiry, timeline actions, and snapshot restores so consequences remain visible after motion settles.
 
+## Control-room slice delivered
+
+The stage now exposes pause, resume, and one-tick stepping over the actual Rapier simulation. A visible simulation clock and ledger entries make fixed-step inspection explicit: pause holds the world, each step advances one 1/60-second tick, and resume returns to live accumulation. Browser evidence covers the control sequence; the provider-free boundary remains intact.
+
 ## First work for the build agent
 
 Exercise one configured compatible provider through the browser and record the applied engine effect. The prepared collision sound, temporary interaction rules, experiment loop, and adapter boundary are now part of the engine; keep their provider-free behavior separate from the live-AI path.

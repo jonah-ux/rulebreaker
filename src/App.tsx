@@ -48,6 +48,9 @@ export default function App() {
   const [demoStep, setDemoStep] = useState(0)
   const [demoRunning, setDemoRunning] = useState(false)
   const [ledger, setLedger] = useState<LedgerEntry[]>([])
+  const [paused, setPaused] = useState(false)
+  const [stepRequest, setStepRequest] = useState<{ nonce: number } | null>(null)
+  const [simulationTick, setSimulationTick] = useState(0)
   const audioContext = useRef<AudioContext | null>(null)
   const activeVoices = useRef(0)
   const actionNonce = useRef(0)
@@ -140,6 +143,7 @@ export default function App() {
     for (const body of snapshot.bodies) if (body.frozenUntilTick !== null && body.frozenUntilTick > snapshot.tick) activeFrozen[body.id] = body.frozenUntilTick
     setFrozen(activeFrozen)
     setLastNote(null)
+    setSimulationTick(snapshot.tick)
     addLedgerEntry('restore', 'Snapshot restored', `tick ${snapshot.tick} · ${snapshot.bodies.length} bodies`)
   }, [addLedgerEntry])
   const requestFreeze = () => {
@@ -156,6 +160,16 @@ export default function App() {
     const next = !collisionNotes
     setCollisionNotes(next)
     addLedgerEntry('law', next ? 'Prepared law applied · collision notes' : 'Prepared law silenced', next ? 'threshold 1.2 m/s · cooldown 24 ticks · four voices' : 'collision-note policy removed')
+  }
+  const togglePaused = () => {
+    const next = !paused
+    setPaused(next)
+    addLedgerEntry('restore', next ? 'Simulation paused' : 'Simulation resumed', `clock tick ${simulationTick}`)
+  }
+  const stepSimulation = () => {
+    if (!paused) return
+    setStepRequest({ nonce: nextNonce() })
+    addLedgerEntry('restore', 'Simulation advanced one tick', `from tick ${simulationTick}`)
   }
   const resetRoom = () => {
     for (const timer of demoTimers.current) window.clearTimeout(timer)
@@ -177,6 +191,9 @@ export default function App() {
     setLiveStatus('Live AI is separate from prepared mode and requires server configuration.')
     setCanUndo(false)
     setHasBranch(false)
+    setPaused(false)
+    setStepRequest(null)
+    setSimulationTick(0)
     setExperimentStatus('Room reset. Import an experiment snapshot here to restore it.')
     setLedger([])
     setReset(value => value + 1)
@@ -315,8 +332,12 @@ export default function App() {
         onImportResult={handleImportResult}
         onLawResult={handleLawResult}
         onRestored={handleRestored}
+        paused={paused}
+        stepRequest={stepRequest}
+        onTick={setSimulationTick}
       />
       <div className="stage-caption"><span>DRAG TO ORBIT</span><span>SCROLL TO ZOOM</span><span>CLICK TO SELECT</span></div>
+      <div className="stage-controls" aria-label="Simulation controls"><button className="stage-control-button" onClick={togglePaused}>{paused ? 'Resume room' : 'Pause room'}</button><button className="stage-control-button" disabled={!paused} onClick={stepSimulation}>Step 1 tick</button><span className={paused ? 'clock-state paused' : 'clock-state'}>{paused ? 'PAUSED' : 'LIVE'} · TICK {simulationTick}</span></div>
     </section>
 
     <section className="lab-grid">

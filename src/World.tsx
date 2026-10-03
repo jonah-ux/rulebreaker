@@ -11,6 +11,7 @@ type HistoryAction = { type: 'undo' | 'save-branch' | 'restore-branch'; nonce: n
 type ExportRequest = { nonce: number } | null
 type ImportRequest = { nonce: number; payload: string } | null
 type LawRequest = { nonce: number; law: unknown } | null
+type StepRequest = { nonce: number } | null
 type RestoreResult = { ok: boolean; message: string }
 
 type WorldProps = {
@@ -23,6 +24,8 @@ type WorldProps = {
   exportRequest: ExportRequest
   importRequest: ImportRequest
   lawRequest: LawRequest
+  paused: boolean
+  stepRequest: StepRequest
   onHeight: (value: number) => void
   onSelected: (id: string) => void
   onEvent: (event: SimulationEvent) => void
@@ -31,6 +34,7 @@ type WorldProps = {
   onImportResult: (result: RestoreResult) => void
   onLawResult: (result: RestoreResult) => void
   onRestored: (snapshot: Experiment) => void
+  onTick: (tick: number) => void
 }
 
 const BLUE_GRAVITY = (targets: string[], upward: boolean) => ({
@@ -301,14 +305,29 @@ export function World(props: WorldProps) {
       let previous = performance.now()
       let accumulator = 0
       let sampleTicks = 0
+      let consumedStepNonce: number | null = null
       const animate = (now: number) => {
         accumulator += Math.min((now - previous) / 1000, 0.1)
         previous = now
-        while (accumulator >= 1 / 60) {
-          const events = simulation.step()
-          for (const event of events) propsRef.current.onEvent(event)
-          accumulator -= 1 / 60
-          if (++sampleTicks % 12 === 0) propsRef.current.onHeight(simulation.bodies.get('blue-a')!.translation().y)
+        const current = propsRef.current
+        const requestedStep = current.stepRequest && current.stepRequest.nonce !== consumedStepNonce
+        if (current.paused) {
+          accumulator = 0
+          if (requestedStep) {
+            consumedStepNonce = current.stepRequest!.nonce
+            const events = simulation.step()
+            for (const event of events) current.onEvent(event)
+            current.onTick(simulation.tick)
+            current.onHeight(simulation.bodies.get('blue-a')!.translation().y)
+          }
+        } else {
+          while (accumulator >= 1 / 60) {
+            const events = simulation.step()
+            for (const event of events) current.onEvent(event)
+            current.onTick(simulation.tick)
+            accumulator -= 1 / 60
+            if (++sampleTicks % 12 === 0) current.onHeight(simulation.bodies.get('blue-a')!.translation().y)
+          }
         }
         for (const { id, mesh, material, halo, haloMaterial } of meshes) {
           const body = simulation.bodies.get(id)!

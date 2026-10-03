@@ -24,6 +24,8 @@ The same panel has a **Try prepared** path for phrases such as “make the blue 
 
 Use **Run Impossible Room demo** to walk through collision notes, inverted blue gravity, and a three-second freeze in one no-key sequence. The final step leaves the controls available so you can invent the variation.
 
+The room also exposes its simulation clock. **Pause room** stops the actual Rapier world while the render stays inspectable; **Step 1 tick** advances exactly one fixed 1/60-second simulation step while paused. The `LIVE · TICK` readout is simulation time, not render-frame count, and pause, resume, and single-step actions are recorded in the event ledger.
+
 ## Start locally
 
 Use Node.js 22.12 or newer and npm. From a clean clone:

@@ -18,6 +18,8 @@ Every law carries `schema: rulebreaker/law/v1`, an explicit `operation`, and a b
 
 Rapier advances at a fixed 1/60-second step. Collision events are collected through `EventQueue`, filtered by target and relative impact speed, and emitted as bounded `collision-note` events with a deterministic rotating frequency. A pair cooldown prevents persistent contacts from becoming an unbounded event stream. Freeze expiry is measured in the same simulation ticks, so the timer remains independent of render-frame pacing. The browser presentation consumes these events and schedules short Web Audio voices only after an explicit user gesture.
 
+The stage control surface exposes that same clock for inspection. `Pause room` clears the render accumulator and stops calls to `simulation.step`; `Step 1 tick` is accepted only while paused and consumes one nonce so one click produces one Rapier step, one clock increment, and one event-ledger entry. Resuming returns to the accumulator-driven fixed-step loop. The displayed tick is therefore engine time, not an estimate derived from animation frames.
+
 The sample scene keeps its dynamic bodies awake so gravity changes can affect objects after they settle against a boundary. Sleeping-body optimization and cross-browser determinism remain outside this slice.
 
 ## Experiment format and history
