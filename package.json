@@ -1,0 +1,42 @@
+{
+  "name": "rulebreaker",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint --threads 2",
+    "preview": "vite preview --host 127.0.0.1 --port 6173 --strictPort",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run --maxWorkers=2",
+    "verify": "npm run lint && npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "three": "^0.186.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@types/three": "^0.186.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.3"
+  },
+  "description": "A playground for inspectable laws in a simulated world.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jonah-ux/rulebreaker.git"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}
