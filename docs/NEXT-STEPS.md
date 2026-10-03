@@ -28,6 +28,10 @@ The stage now exposes pause, resume, and one-tick stepping over the actual Rapie
 
 The control room now samples local browser behavior over bounded half-second windows. It reports frame time, measured FPS, Rapier physics cadence, renderer draw calls/triangles, geometry and texture counts, object count, and device pixel ratio. These measurements are intentionally scoped to the current browser and machine; they are evidence for inspection, not a cross-browser performance claim.
 
+## Replay slice delivered
+
+The room now records tick-0 and 30-tick Rapier checkpoints in a bounded timeline. Previous/next/latest controls and a slider restore the complete validated experiment snapshot, pause the room, show the selected tick, and discard abandoned future checkpoints when the player branches from history. Engine event ticks appear as markers on the replay track; continuing from a checkpoint records a new future without a provider call.
+
 ## First work for the build agent
 
 Exercise one configured compatible provider through the browser and record the applied engine effect. The prepared collision sound, temporary interaction rules, experiment loop, and adapter boundary are now part of the engine; keep their provider-free behavior separate from the live-AI path.

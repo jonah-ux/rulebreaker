@@ -8,6 +8,8 @@ import type { Experiment } from './domain'
 import type { SimulationEvent } from './simulation'
 import { summarizeRuntimeWindow } from './runtimeMetrics'
 import type { RuntimeMetrics } from './runtimeMetrics'
+import { REPLAY_CHECKPOINT_INTERVAL } from './replay'
+import type { ReplayCheckpoint } from './replay'
 
 export type { RuntimeMetrics } from './runtimeMetrics'
 
@@ -42,6 +44,9 @@ type WorldProps = {
   onLawApplied: (snapshot: Experiment) => void
   onTick: (tick: number) => void
   onMetrics: (metrics: RuntimeMetrics) => void
+  replayRequest: { nonce: number; checkpoint: ReplayCheckpoint } | null
+  onCheckpoint: (snapshot: Experiment) => void
+  onReplayMarker: (tick: number) => void
 }
 
 const BLUE_GRAVITY = (targets: string[], upward: boolean) => ({
@@ -82,8 +87,10 @@ export function World(props: WorldProps) {
   const lastExportNonce = useRef<number | null>(null)
   const lastImportNonce = useRef<number | null>(null)
   const readyRef = useRef(false)
+  const lastReplayRequestNonce = useRef<number | null>(null)
+  const lastCheckpointTick = useRef<number | null>(null)
 
-  const { upward, collisionNotes, freezeRequest, historyAction, exportRequest, importRequest, lawRequest, onEvent } = props
+  const { upward, collisionNotes, freezeRequest, historyAction, exportRequest, importRequest, lawRequest, replayRequest, onEvent } = props
 
   useEffect(() => {
     propsRef.current = props
@@ -119,6 +126,7 @@ export function World(props: WorldProps) {
       lastFreezeNonce.current = freezeRequest.nonce
       for (const event of simulation.apply(FREEZE(freezeRequest.id))) propsRef.current.onEvent(event)
     }
+    propsRef.current.onCheckpoint(simulation.snapshot(selectedRef.current))
   }, [upward, collisionNotes, freezeRequest, onEvent])
 
   useEffect(() => {
@@ -133,6 +141,8 @@ export function World(props: WorldProps) {
         freezeNonce: null,
       }
       propsRef.current.onRestored(restored)
+      propsRef.current.onCheckpoint(restored)
+      lastCheckpointTick.current = restored.tick
       suppressNextHistoryRef.current = false
       notifyHistory()
     }
@@ -168,6 +178,8 @@ export function World(props: WorldProps) {
           freezeNonce: null,
         }
         propsRef.current.onRestored(restored)
+        propsRef.current.onCheckpoint(restored)
+        lastCheckpointTick.current = restored.tick
         suppressNextHistoryRef.current = false
         propsRef.current.onImportResult({ ok: true, message: 'Experiment imported into the live room.' })
         notifyHistory()
@@ -176,6 +188,26 @@ export function World(props: WorldProps) {
       }
     }
   }, [historyAction, exportRequest, importRequest])
+
+  useEffect(() => {
+    const simulation = simulationRef.current
+    if (!simulation || !replayRequest || replayRequest.nonce === lastReplayRequestNonce.current) return
+    lastReplayRequestNonce.current = replayRequest.nonce
+    try {
+      const restored = simulation.restore(replayRequest.checkpoint.snapshot)
+      lastRuleStateRef.current = {
+        upward: restored.bodies.filter(body => simulation.scene.objects.find(object => object.id === body.id)?.color === 'blue').every(body => body.gravityScale === -1),
+        collisionNotes: restored.collisionNoteLaw !== null,
+        freezeNonce: null,
+      }
+      selectedRef.current = restored.selectedId
+      lastCheckpointTick.current = restored.tick
+      propsRef.current.onRestored(restored)
+      propsRef.current.onCheckpoint(restored)
+    } catch (error) {
+      propsRef.current.onImportResult({ ok: false, message: error instanceof Error ? error.message : 'Replay checkpoint was refused.' })
+    }
+  }, [replayRequest])
 
   useEffect(() => {
     const simulation = simulationRef.current
@@ -197,6 +229,7 @@ export function World(props: WorldProps) {
         freezeNonce: null,
       }
       propsRef.current.onLawApplied(applied)
+      propsRef.current.onCheckpoint(applied)
       for (const event of events) propsRef.current.onEvent(event)
       propsRef.current.onLawResult({ ok: true, message: 'Live proposal applied to the physics engine.' })
       propsRef.current.onHistoryState(historyRef.current.length > 0, branchRef.current !== null)
@@ -289,6 +322,8 @@ export function World(props: WorldProps) {
       }
       applyCurrentRules()
       readyRef.current = true
+      lastCheckpointTick.current = simulation.tick
+      propsRef.current.onCheckpoint(simulation.snapshot(selectedRef.current))
       propsRef.current.onHistoryState(historyRef.current.length > 0, branchRef.current !== null)
 
       const raycaster = new THREE.Raycaster()
@@ -343,6 +378,7 @@ export function World(props: WorldProps) {
             consumedStepNonce = current.stepRequest!.nonce
             const events = simulation.step()
             for (const event of events) current.onEvent(event)
+            if (events.length > 0) current.onReplayMarker(simulation.tick)
             current.onTick(simulation.tick)
             current.onHeight(simulation.bodies.get('blue-a')!.translation().y)
           }
@@ -350,10 +386,15 @@ export function World(props: WorldProps) {
           while (accumulator >= 1 / 60) {
             const events = simulation.step()
             for (const event of events) current.onEvent(event)
+            if (events.length > 0) current.onReplayMarker(simulation.tick)
             current.onTick(simulation.tick)
             accumulator -= 1 / 60
             if (++sampleTicks % 12 === 0) current.onHeight(simulation.bodies.get('blue-a')!.translation().y)
           }
+        }
+        if (lastCheckpointTick.current !== simulation.tick && simulation.tick % REPLAY_CHECKPOINT_INTERVAL === 0) {
+          lastCheckpointTick.current = simulation.tick
+          current.onCheckpoint(simulation.snapshot(selectedRef.current))
         }
         for (const { id, mesh, material, halo, haloMaterial } of meshes) {
           const body = simulation.bodies.get(id)!

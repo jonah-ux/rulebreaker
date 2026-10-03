@@ -106,6 +106,16 @@ p { color: var(--muted); }
 .import-row { display: flex; align-items: center; gap: 14px; margin-top: 11px; }
 .import-row .freeze-button { width: auto; white-space: nowrap; }
 .import-row span { color: var(--muted); font-size: .72rem; }
+.replay-panel { margin-top: 18px; padding: 25px; }
+.replay-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 10px; }
+.replay-slider { width: 100%; accent-color: var(--cyan); }
+.replay-slider:disabled { opacity: .45; }
+.replay-track { position: relative; height: 8px; margin: 6px 0 16px; overflow: hidden; border-radius: 999px; background: #203d4d; }
+.replay-track-fill { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: linear-gradient(90deg, var(--cyan), var(--lime)); }
+.replay-marker { position: absolute; top: 0; width: 3px; height: 8px; transform: translateX(-1px); background: var(--orange); box-shadow: 0 0 8px #ffbf70; }
+.replay-readout { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-top: 13px; border-top: 1px solid #274456; }
+.replay-readout strong { font-size: .82rem; }
+.replay-readout span { color: var(--muted); font-family: 'DM Mono', monospace; font-size: .62rem; }
 .ledger-panel { margin-top: 18px; padding: 25px; }
 .ledger-empty { padding: 18px 0 3px; color: #7893a4; font-family: 'DM Mono', monospace; font-size: .68rem; }
 .ledger-list { display: grid; gap: 8px; max-height: 310px; margin: 15px 0 0; padding: 0; overflow: auto; list-style: none; }
@@ -134,5 +144,5 @@ p { color: var(--muted); }
 footer { display: flex; flex-wrap: wrap; gap: 20px; justify-content: space-between; margin-top: 28px; color: #7893a4; font-family: 'DM Mono', monospace; font-size: .63rem; }
 footer a { color: var(--cyan); text-decoration: none; }
 @media (max-width: 850px) { main { width: min(100% - 30px, 700px); padding-top: 34px; } .hero { display: block; } .mode-card { width: max-content; margin-top: 23px; } .lab-grid { grid-template-columns: 1fr; } }
-@media (max-width: 560px) { main { width: min(100% - 22px, 700px); } h1 { font-size: clamp(2.6rem, 15vw, 4.8rem); } .world { height: 420px; } .stage-caption { left: 14px; right: auto; bottom: 12px; gap: 8px; font-size: .49rem; transform: translateY(24px); } .stage-controls { left: 12px; right: 12px; bottom: 39px; flex-wrap: wrap; } .live-panel, .demo-panel, .laws-panel, .inspector-panel, .experiment-panel, .ledger-panel, .runtime-panel { padding: 19px; } .live-form, .proposal-card, .demo-actions { align-items: stretch; flex-direction: column; } .law-card { grid-template-columns: 28px 1fr; } .law-card .small-button { grid-column: 2; justify-self: start; } .import-row { align-items: flex-start; flex-direction: column; } .telemetry-row, .runtime-grid { grid-template-columns: 1fr; } .telemetry-row > div, .runtime-grid > div { min-height: auto; } footer { display: block; } footer span, footer a { display: block; margin-bottom: 8px; } }
+@media (max-width: 560px) { main { width: min(100% - 22px, 700px); } h1 { font-size: clamp(2.6rem, 15vw, 4.8rem); } .world { height: 420px; } .stage-caption { left: 14px; right: auto; bottom: 12px; gap: 8px; font-size: .49rem; transform: translateY(24px); } .stage-controls { left: 12px; right: 12px; bottom: 39px; flex-wrap: wrap; } .live-panel, .demo-panel, .laws-panel, .inspector-panel, .experiment-panel, .replay-panel, .ledger-panel, .runtime-panel { padding: 19px; } .live-form, .proposal-card, .demo-actions { align-items: stretch; flex-direction: column; } .law-card { grid-template-columns: 28px 1fr; } .law-card .small-button { grid-column: 2; justify-self: start; } .import-row { align-items: flex-start; flex-direction: column; } .telemetry-row, .runtime-grid { grid-template-columns: 1fr; } .telemetry-row > div, .runtime-grid > div { min-height: auto; } .replay-readout { align-items: flex-start; flex-direction: column; } footer { display: block; } footer span, footer a { display: block; margin-bottom: 8px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
