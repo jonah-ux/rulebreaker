@@ -10,6 +10,7 @@ type FreezeRequest = { id: string; nonce: number } | null
 type HistoryAction = { type: 'undo' | 'save-branch' | 'restore-branch'; nonce: number } | null
 type ExportRequest = { nonce: number } | null
 type ImportRequest = { nonce: number; payload: string } | null
+type LawRequest = { nonce: number; law: unknown } | null
 type RestoreResult = { ok: boolean; message: string }
 
 type WorldProps = {
@@ -21,12 +22,14 @@ type WorldProps = {
   historyAction: HistoryAction
   exportRequest: ExportRequest
   importRequest: ImportRequest
+  lawRequest: LawRequest
   onHeight: (value: number) => void
   onSelected: (id: string) => void
   onEvent: (event: SimulationEvent) => void
   onHistoryState: (canUndo: boolean, hasBranch: boolean) => void
   onExport: (payload: string) => void
   onImportResult: (result: RestoreResult) => void
+  onLawResult: (result: RestoreResult) => void
   onRestored: (snapshot: Experiment) => void
 }
 
@@ -64,11 +67,12 @@ export function World(props: WorldProps) {
   const lastRuleStateRef = useRef({ upward: props.upward, collisionNotes: props.collisionNotes, freezeNonce: props.freezeRequest?.nonce ?? null })
   const suppressNextHistoryRef = useRef(false)
   const lastHistoryActionNonce = useRef<number | null>(null)
+  const lastLawRequestNonce = useRef<number | null>(null)
   const lastExportNonce = useRef<number | null>(null)
   const lastImportNonce = useRef<number | null>(null)
   const readyRef = useRef(false)
 
-  const { upward, collisionNotes, freezeRequest, historyAction, exportRequest, importRequest, onEvent } = props
+  const { upward, collisionNotes, freezeRequest, historyAction, exportRequest, importRequest, lawRequest, onEvent } = props
 
   useEffect(() => {
     propsRef.current = props
@@ -156,6 +160,23 @@ export function World(props: WorldProps) {
       }
     }
   }, [historyAction, exportRequest, importRequest])
+
+  useEffect(() => {
+    const simulation = simulationRef.current
+    if (!simulation || !lawRequest || lawRequest.nonce === lastLawRequestNonce.current) return
+    lastLawRequestNonce.current = lawRequest.nonce
+    if (readyRef.current) {
+      historyRef.current.push(simulation.snapshot(selectedRef.current))
+      if (historyRef.current.length > 24) historyRef.current.shift()
+    }
+    try {
+      for (const event of simulation.apply(lawRequest.law)) propsRef.current.onEvent(event)
+      propsRef.current.onLawResult({ ok: true, message: 'Live proposal applied to the physics engine.' })
+      propsRef.current.onHistoryState(historyRef.current.length > 0, branchRef.current !== null)
+    } catch (error) {
+      propsRef.current.onLawResult({ ok: false, message: error instanceof Error ? error.message : 'The live proposal was refused.' })
+    }
+  }, [lawRequest, onEvent])
 
   useEffect(() => {
     const container = host.current!

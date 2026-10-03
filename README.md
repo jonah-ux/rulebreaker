@@ -4,7 +4,7 @@
 
 A browser laboratory for inspectable laws in a simulated world.
 
-**Status: the first playable physics and experiment slices are shipped in source.** The room, typed laws, object selection, collision-note policy, temporary freeze, undo, branching, and local experiment snapshots are usable without credentials. The live model adapter remains a future slice.
+**Status: the first playable physics, experiment, and live-adapter slices are shipped in source.** The room, typed laws, object selection, collision-note policy, temporary freeze, undo, branching, local experiment snapshots, and a server-side provider boundary are available. Live provider behavior is only verified when a real compatible endpoint is configured.
 
 ## Try the room
 
@@ -18,6 +18,8 @@ Drag the room to orbit, scroll to zoom, and click a shape to select it. The insp
 
 Use **Undo last law** to return to the previous typed-law state. **Save branch** stores one local timeline point and **Restore branch** returns to it. **Export JSON** writes a `rulebreaker/experiment/v1` document into the inspector; reset the room and use **Import into room** to validate and restore that snapshot.
 
+The separate **Live / Provider** panel accepts a natural-language prompt, sends it only through the server-side adapter, validates the returned typed law, and waits for an explicit **Apply proposal** action. With no provider configuration it reports `live provider is not configured; use prepared mode` and leaves the prepared room untouched.
+
 ## Start locally
 
 Use Node.js 22.12 or newer and npm. From a clean clone:
@@ -28,6 +30,8 @@ npm run dev
 ```
 
 Open http://127.0.0.1:5173. Each of the three creative projects uses a different development port.
+
+To exercise the optional OpenAI-compatible adapter, copy `.env.example` to `.env.local` and set `RULEBREAKER_AI_API_KEY`, `RULEBREAKER_AI_BASE_URL`, and `RULEBREAKER_AI_MODEL` before starting the Vite server. Keys are read by the server middleware and are never placed in the browser bundle.
 
 ## Checks
 
@@ -41,13 +45,13 @@ This runs lint, TypeScript, engine/schema checks, and the production build. CI r
 
 Start with [AGENTS.md](AGENTS.md), then give an agent the complete [build prompt](docs/BUILD-PROMPT.md). [NEXT-STEPS.md](docs/NEXT-STEPS.md) tracks the delivered physics and experiment slices and the remaining first-release work.
 
-The next coherent slice is the server-side AI law adapter. Keep prepared behavior separate from live provider output until a real configured provider has completed the request → validation → engine-effect path.
+The next proof gate is a real configured provider completing request → validated law → engine effect. Keep prepared behavior separate from live provider output until that path has been exercised.
 
 ## Architecture
 
-`src/domain.ts` owns scene, law, event, and versioned experiment validation. `src/simulation.ts` owns the Rapier world, fixed 60 Hz stepping, typed gravity/collision/freeze operations, collision cooldowns, freeze expiry, bounded event output, and atomic snapshot restore. `src/World.tsx` owns the Three.js renderer, orbit controls, raycast selection, and presentation of observed engine state plus history actions. `src/App.tsx` owns prepared law controls, the explicit Web Audio gesture, and the local experiment text surface. `src/scene.json` is the sample scene.
+`src/domain.ts` owns scene, law, event, and versioned experiment validation. `src/simulation.ts` owns the Rapier world, fixed 60 Hz stepping, typed gravity/collision/freeze operations, collision cooldowns, freeze expiry, bounded event output, and atomic snapshot restore. `src/World.tsx` owns the Three.js renderer, orbit controls, raycast selection, and presentation of observed engine state plus history actions. `src/App.tsx` owns prepared law controls, the explicit Web Audio gesture, the local experiment text surface, and live proposal approval. `server/ai.ts` owns bounded OpenAI-compatible requests, cancellation/timeout, and provider-output validation; `vite.config.ts` exposes that route only through the local server middleware. `src/scene.json` is the sample scene.
 
-Keep model output as validated data and provider secrets on a future server-side adapter. There is still no server or provider connection in the prepared slice; no environment credential is needed or read. See [architecture](docs/ARCHITECTURE.md).
+Keep model output as validated data and provider secrets on the server-side adapter. Prepared mode remains independent of credentials; live mode is unavailable until the optional environment is configured. See [architecture](docs/ARCHITECTURE.md).
 
 ## Provenance
 

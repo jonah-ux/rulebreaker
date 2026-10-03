@@ -1,11 +1,12 @@
 import { useCallback, useRef, useState } from 'react'
 import sample from './scene.json'
 import { World } from './World'
-import type { Experiment } from './domain'
+import type { Experiment, Law } from './domain'
 import type { SimulationEvent } from './simulation'
 import './App.css'
 
 type AudioWindow = Window & { webkitAudioContext?: typeof AudioContext }
+type LiveProposal = { mode: 'live-ai'; provider: string; model: string; interpretation: string; law: Law }
 
 const objectNames: Record<string, string> = {
   'blue-a': 'Blue prism A',
@@ -32,13 +33,19 @@ export default function App() {
   const [historyAction, setHistoryAction] = useState<{ type: 'undo' | 'save-branch' | 'restore-branch'; nonce: number } | null>(null)
   const [exportRequest, setExportRequest] = useState<{ nonce: number } | null>(null)
   const [importRequest, setImportRequest] = useState<{ nonce: number; payload: string } | null>(null)
+  const [lawRequest, setLawRequest] = useState<{ nonce: number; law: unknown } | null>(null)
   const [canUndo, setCanUndo] = useState(false)
   const [hasBranch, setHasBranch] = useState(false)
   const [experimentText, setExperimentText] = useState('')
   const [experimentStatus, setExperimentStatus] = useState('Snapshots include laws, timers, physics state, cooldowns, and selection.')
+  const [livePrompt, setLivePrompt] = useState('')
+  const [liveProposal, setLiveProposal] = useState<LiveProposal | null>(null)
+  const [liveStatus, setLiveStatus] = useState('Live AI is separate from prepared mode and requires server configuration.')
+  const [liveBusy, setLiveBusy] = useState(false)
   const audioContext = useRef<AudioContext | null>(null)
   const activeVoices = useRef(0)
   const actionNonce = useRef(0)
+  const liveAbort = useRef<AbortController | null>(null)
 
   const enableAudio = () => {
     const AudioContextClass = window.AudioContext ?? (window as AudioWindow).webkitAudioContext
@@ -95,6 +102,9 @@ export default function App() {
   const handleImportResult = useCallback((result: { ok: boolean; message: string }) => {
     setExperimentStatus(result.message)
   }, [])
+  const handleLawResult = useCallback((result: { ok: boolean; message: string }) => {
+    setLiveStatus(result.message)
+  }, [])
   const handleRestored = useCallback((snapshot: Experiment) => {
     const blueBodies = snapshot.bodies.filter(body => body.id.startsWith('blue-'))
     setUpward(blueBodies.length > 0 && blueBodies.every(body => body.gravityScale === -1))
@@ -122,6 +132,9 @@ export default function App() {
     setHistoryAction(null)
     setExportRequest(null)
     setImportRequest(null)
+    setLawRequest(null)
+    setLiveProposal(null)
+    setLiveStatus('Live AI is separate from prepared mode and requires server configuration.')
     setCanUndo(false)
     setHasBranch(false)
     setExperimentStatus('Room reset. Import an experiment snapshot here to restore it.')
@@ -130,6 +143,44 @@ export default function App() {
 
   const requestExport = () => setExportRequest({ nonce: nextNonce() })
   const requestImport = () => setImportRequest({ nonce: nextNonce(), payload: experimentText })
+  const requestLiveProposal = async () => {
+    if (!livePrompt.trim()) {
+      setLiveStatus('Describe a law before asking the live interpreter.')
+      return
+    }
+    liveAbort.current?.abort()
+    const controller = new AbortController()
+    liveAbort.current = controller
+    setLiveBusy(true)
+    setLiveStatus('Asking the configured provider to propose a typed law…')
+    try {
+      const response = await fetch('/api/interpret', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt: livePrompt, scene: sample }),
+        signal: controller.signal,
+      })
+      const payload = await response.json() as { error?: string } & Partial<LiveProposal>
+      if (!response.ok) throw new Error(payload.error ?? `Live interpreter returned HTTP ${response.status}`)
+      if (payload.mode !== 'live-ai' || !payload.law || typeof payload.interpretation !== 'string') throw new Error('Live interpreter returned an incomplete proposal.')
+      const proposal = payload as LiveProposal
+      setLiveProposal(proposal)
+      setLiveStatus(`Validated ${proposal.law.operation} from ${proposal.model}. Review it before applying.`)
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      setLiveProposal(null)
+      setLiveStatus(error instanceof Error ? error.message : 'Live interpretation failed.')
+    } finally {
+      if (liveAbort.current === controller) liveAbort.current = null
+      setLiveBusy(false)
+    }
+  }
+  const applyLiveProposal = () => {
+    if (!liveProposal) return
+    setLawRequest({ nonce: nextNonce(), law: liveProposal.law })
+    setSelectedId(liveProposal.law.targets[0] ?? null)
+    setLiveStatus('Applying the validated live proposal…')
+  }
 
   const selectedName = selectedId ? displayName(selectedId) : 'Nothing selected'
   const frozenNames = Object.keys(frozen).map(displayName)
@@ -147,6 +198,14 @@ export default function App() {
       </div>
     </header>
 
+    <section className="panel live-panel" aria-label="Live AI interpreter">
+      <div className="panel-heading"><div><span className="panel-kicker">LIVE / PROVIDER</span><h2>Ask the configured interpreter</h2></div><span className="live-badge">separate path</span></div>
+      <p className="panel-copy">The server sends your bounded prompt and scene description to the configured provider, validates the returned law, and shows it for approval. A missing provider leaves prepared mode untouched.</p>
+      <div className="live-form"><input aria-label="Live law prompt" value={livePrompt} onChange={event => setLivePrompt(event.target.value)} placeholder="e.g. Blue objects fall upward" maxLength={500} /><button className="small-button" disabled={liveBusy} onClick={requestLiveProposal}>{liveBusy ? 'Thinking…' : 'Interpret with live AI'}</button></div>
+      <div className="live-status">{liveStatus}</div>
+      {liveProposal && <div className="proposal-card"><div><span className="panel-kicker">VALIDATED PROPOSAL</span><strong>{liveProposal.interpretation}</strong><span>{liveProposal.model} · {liveProposal.law.operation}</span></div><button className="freeze-button" onClick={applyLiveProposal}>Apply proposal</button></div>}
+    </section>
+
     <section className="stage" aria-label="Impossible Room">
       <World
         key={reset}
@@ -158,12 +217,14 @@ export default function App() {
         historyAction={historyAction}
         exportRequest={exportRequest}
         importRequest={importRequest}
+        lawRequest={lawRequest}
         onHeight={setHeight}
         onSelected={selectObject}
         onEvent={handleEvent}
         onHistoryState={handleHistoryState}
         onExport={handleExport}
         onImportResult={handleImportResult}
+        onLawResult={handleLawResult}
         onRestored={handleRestored}
       />
       <div className="stage-caption"><span>DRAG TO ORBIT</span><span>SCROLL TO ZOOM</span><span>CLICK TO SELECT</span></div>

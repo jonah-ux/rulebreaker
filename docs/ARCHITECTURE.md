@@ -1,6 +1,6 @@
 # Rulebreaker architecture
 
-A single Vite/React/TypeScript application with independent npm dependencies and a lockfile. Zod validates the versioned scene, law, event, and experiment formats. The prepared slices have no application server, account system, credential, or provider request.
+A single Vite/React/TypeScript application with independent npm dependencies and a lockfile. Zod validates the versioned scene, law, event, and experiment formats. Prepared mode has no credential or provider dependency; the local Vite server optionally mounts one bounded provider route.
 
 `src/domain.ts` owns scene/law/event/experiment validation. `src/simulation.ts` owns the Rapier instance, fixed-step state, and atomic snapshot restore. `src/World.tsx` owns rendering, camera controls, raycast selection, animation, and history actions. `src/App.tsx` owns the prepared interaction panel, browser audio activation, and the local export/import surface. `src/scene.json` is the sample scene.
 
@@ -24,10 +24,10 @@ The sample scene keeps its dynamic bodies awake so gravity changes can affect ob
 
 `rulebreaker/experiment/v1` records the scene identity, `rulebreaker/engine/v1`, simulation tick, every body's transform/velocity/gravity scale, freeze expiry, the active collision-note law, pending events, cooldown map, note sequence, and the selected object. `simulation.restore` validates the whole document and all references before changing a body. Undo and branch restore use the same restore path, so they do not call a model or replay audio. The UI keeps a bounded local history of 24 snapshots and one branch point. Export/import is local JSON; it is not a cloud save or a cross-browser determinism claim.
 
-## Future AI seam
+## Live AI seam
 
-Add a thin server-side adapter behind a tested request/response format when beginning the AI slice. The product engine owns effects and state; a model proposes bounded data. Timeouts, unsupported output, and cancellation must preserve the current prepared experience. Credentials must not become VITE_ variables or committed artifacts.
+`server/ai.ts` sends a bounded prompt plus the validated scene to an OpenAI-compatible `/chat/completions` endpoint using `RULEBREAKER_AI_BASE_URL`, `RULEBREAKER_AI_API_KEY`, and `RULEBREAKER_AI_MODEL`. The system prompt requires a JSON envelope containing a short interpretation and one typed law; `validateLaw` checks scope and bounds before the proposal reaches the UI. Requests time out after eight seconds and accept cancellation. A missing key or malformed/provider-failed response is shown as a live-mode error while prepared mode continues unchanged. The adapter is mounted by the local Vite middleware; no browser bundle contains the key, and no production deployment is implied.
 
 ## Scope
 
-This slice does not implement the complete docs/BUILD-PROMPT.md. docs/NEXT-STEPS.md lists the remaining work. A local dev server is not a public deployment.
+The project does not implement the complete docs/BUILD-PROMPT.md. docs/NEXT-STEPS.md lists the remaining proof work. A local dev server is not a public deployment, and a configured adapter is not live-provider proof until a real request produces an applied engine effect.
