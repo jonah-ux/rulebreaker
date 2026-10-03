@@ -34,4 +34,14 @@ describe('starter law boundary', () => {
       expect(simulation.bodies.get('blue-a')!.translation().y).toBeLessThan(4)
     } finally { simulation.dispose() }
   })
+  it('lifts a selected body after it has settled on the floor', async () => {
+    const simulation = await createSimulation(sample)
+    try {
+      for (let tick = 0; tick < 300; tick++) simulation.step()
+      const before = simulation.bodies.get('blue-a')!.translation().y
+      simulation.apply(law)
+      for (let tick = 0; tick < 60; tick++) simulation.step()
+      expect(simulation.bodies.get('blue-a')!.translation().y).toBeGreaterThan(before + 0.2)
+    } finally { simulation.dispose() }
+  })
 })

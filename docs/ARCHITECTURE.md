@@ -4,6 +4,10 @@ A single Vite/React/TypeScript application with independent npm dependencies and
 
 `src/domain.ts` owns scene/law validation; `src/simulation.ts` owns the physics instance; `src/World.tsx` owns rendering; `src/scene.json` is the sample scene.
 
+The small starter scene keeps its dynamic bodies awake so gravity changes can
+affect objects after they settle against a boundary. Sleeping-body optimization
+and complete replay semantics belong to the next engine slice.
+
 ## Future AI seam
 
 Add a thin server-side adapter behind a tested request/response format when beginning the AI slice. The product engine owns effects and state; a model proposes bounded data. Timeouts, unsupported output, and cancellation must preserve the current usable experience. Credentials must not become VITE_ variables or committed artifacts.

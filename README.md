@@ -1,5 +1,7 @@
 # Rulebreaker
 
+[Source repository](https://github.com/jonah-ux/rulebreaker)
+
 A playground for inspectable laws in a simulated world.
 
 **Status: runnable development starter. Live AI integration and the complete product are still to be built.**
