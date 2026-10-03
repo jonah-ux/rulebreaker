@@ -53,6 +53,7 @@ export const SimulationEventSchema = z.discriminatedUnion('type', [
     second: z.string().min(1).max(40),
     impact: z.number().finite().min(0).max(100),
     frequency: z.number().finite().min(20).max(20000),
+    maxVoices: z.number().int().min(1).max(16).optional(),
   }).strict(),
   z.object({
     type: z.literal('freeze-applied'),
@@ -103,10 +104,11 @@ export function validateExperiment(scene: Scene, value: unknown): Experiment {
   const expectedIds = new Set(scene.objects.map(object => object.id))
   const actualIds = new Set(experiment.bodies.map(body => body.id))
   if (JSON.stringify(experiment.scene) !== JSON.stringify(scene)) throw new Error('experiment scene does not match the current room')
-  if (actualIds.size !== expectedIds.size || [...expectedIds].some(id => !actualIds.has(id))) throw new Error('experiment body identities do not match the current room')
+  if (actualIds.size !== experiment.bodies.length || actualIds.size !== expectedIds.size || [...expectedIds].some(id => !actualIds.has(id))) throw new Error('experiment body identities do not match the current room')
   if (experiment.selectedId && !expectedIds.has(experiment.selectedId)) throw new Error('experiment selection refers to an unknown object')
   if (experiment.bodies.some(body => body.frozenUntilTick !== null && body.frozenUntilTick <= experiment.tick)) throw new Error('experiment contains an expired freeze')
   if (experiment.collisionNoteLaw) validateLaw(scene, experiment.collisionNoteLaw)
   if (experiment.pendingEvents.some(event => event.type === 'collision-note' && ((event.first !== 'room' && !expectedIds.has(event.first)) || (event.second !== 'room' && !expectedIds.has(event.second))))) throw new Error('experiment event refers to an unknown object')
+  if (experiment.pendingEvents.some(event => event.type !== 'collision-note' && !expectedIds.has(event.target))) throw new Error('experiment freeze event refers to an unknown object')
   return experiment
 }

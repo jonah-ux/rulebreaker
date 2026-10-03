@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import sample from './scene.json'
 import { createSimulation } from './simulation'
+import { validateLaw } from './domain'
 import type { Experiment } from './domain'
 import type { SimulationEvent } from './simulation'
 import { summarizeRuntimeWindow } from './runtimeMetrics'
@@ -38,6 +39,7 @@ type WorldProps = {
   onImportResult: (result: RestoreResult) => void
   onLawResult: (result: RestoreResult) => void
   onRestored: (snapshot: Experiment) => void
+  onLawApplied: (snapshot: Experiment) => void
   onTick: (tick: number) => void
   onMetrics: (metrics: RuntimeMetrics) => void
 }
@@ -95,6 +97,7 @@ export function World(props: WorldProps) {
       || nextRuleState.collisionNotes !== lastRuleStateRef.current.collisionNotes
       || nextRuleState.freezeNonce !== lastRuleStateRef.current.freezeNonce
     if (!changed) return
+    const previousRuleState = lastRuleStateRef.current
     lastRuleStateRef.current = nextRuleState
     if (!simulation) return
     if (readyRef.current && !suppressNextHistoryRef.current) {
@@ -105,9 +108,13 @@ export function World(props: WorldProps) {
     suppressNextHistoryRef.current = false
     const blueTargets = simulation.scene.objects.filter(object => object.color === 'blue').map(object => object.id)
     const allTargets = simulation.scene.objects.map(object => object.id)
-    simulation.apply(BLUE_GRAVITY(blueTargets, upward))
-    if (collisionNotes) simulation.apply(COLLISION_NOTES(allTargets))
-    else simulation.clearCollisionNoteLaw()
+    // Prepared controls change only their own law; a freeze must not overwrite
+    // a separately approved gravity scope or collision policy.
+    if (upward !== previousRuleState.upward) simulation.apply(BLUE_GRAVITY(blueTargets, upward))
+    if (collisionNotes !== previousRuleState.collisionNotes) {
+      if (collisionNotes) simulation.apply(COLLISION_NOTES(allTargets))
+      else simulation.clearCollisionNoteLaw()
+    }
     if (freezeRequest && freezeRequest.nonce !== lastFreezeNonce.current) {
       lastFreezeNonce.current = freezeRequest.nonce
       for (const event of simulation.apply(FREEZE(freezeRequest.id))) propsRef.current.onEvent(event)
@@ -174,12 +181,23 @@ export function World(props: WorldProps) {
     const simulation = simulationRef.current
     if (!simulation || !lawRequest || lawRequest.nonce === lastLawRequestNonce.current) return
     lastLawRequestNonce.current = lawRequest.nonce
-    if (readyRef.current) {
-      historyRef.current.push(simulation.snapshot(selectedRef.current))
-      if (historyRef.current.length > 24) historyRef.current.shift()
-    }
     try {
-      for (const event of simulation.apply(lawRequest.law)) propsRef.current.onEvent(event)
+      const law = validateLaw(simulation.scene, lawRequest.law)
+      const previous = simulation.snapshot(selectedRef.current)
+      const events = simulation.apply(law)
+      if (readyRef.current) {
+        historyRef.current.push(previous)
+        if (historyRef.current.length > 24) historyRef.current.shift()
+      }
+      selectedRef.current = law.targets[0]
+      const applied = simulation.snapshot(selectedRef.current)
+      lastRuleStateRef.current = {
+        upward: applied.bodies.filter(body => simulation.scene.objects.find(object => object.id === body.id)?.color === 'blue').every(body => body.gravityScale === -1),
+        collisionNotes: applied.collisionNoteLaw !== null,
+        freezeNonce: null,
+      }
+      propsRef.current.onLawApplied(applied)
+      for (const event of events) propsRef.current.onEvent(event)
       propsRef.current.onLawResult({ ok: true, message: 'Live proposal applied to the physics engine.' })
       propsRef.current.onHistoryState(historyRef.current.length > 0, branchRef.current !== null)
     } catch (error) {

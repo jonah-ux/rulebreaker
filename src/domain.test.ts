@@ -161,7 +161,26 @@ describe('typed law boundary', () => {
       const before = simulation.bodies.get('blue-a')!.translation().y
       expect(() => simulation.restore({ ...snapshot, schema: 'rulebreaker/experiment/v0' })).toThrow()
       expect(() => simulation.restore({ ...snapshot, bodies: snapshot.bodies.map((body, index) => index === 0 ? { ...body, id: 'missing' } : body) })).toThrow()
+      expect(() => simulation.restore({ ...snapshot, bodies: [...snapshot.bodies, snapshot.bodies[0]] })).toThrow()
+      for (const type of ['freeze-applied', 'freeze-expired']) {
+        const event = type === 'freeze-applied' ? { type, target: 'ghost-id', expiresAtTick: 10 } : { type, target: 'ghost-id' }
+        expect(() => simulation.restore({ ...snapshot, pendingEvents: [event] })).toThrow()
+      }
+      expect(simulation.snapshot()).toEqual(snapshot)
       expect(simulation.bodies.get('blue-a')!.translation().y).toBe(before)
     } finally { simulation.dispose() }
+  })
+  it('carries the active collision voice policy to the audio event consumer', async () => {
+    for (const maxVoices of [1, 16]) {
+      const simulation = await createSimulation(sample)
+      try {
+        simulation.apply({ schema: 'rulebreaker/law/v1', operation: 'collision-note', targets: allTargets, threshold: 0.1, cooldownTicks: 24, maxVoices })
+        const events = []
+        for (let tick = 0; tick < 90; tick++) events.push(...simulation.step())
+        const notes = events.filter(event => event.type === 'collision-note')
+        expect(notes.length).toBeGreaterThan(0)
+        expect(notes.every(event => event.maxVoices === maxVoices)).toBe(true)
+      } finally { simulation.dispose() }
+    }
   })
 })

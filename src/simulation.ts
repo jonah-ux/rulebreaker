@@ -81,6 +81,7 @@ export async function createSimulation(value: unknown) {
         second: secondId,
         impact,
         frequency: 220 + (noteSequence++ % 8) * 55,
+        maxVoices: collisionNoteLaw.maxVoices,
       })
     })
   }

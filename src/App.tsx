@@ -71,9 +71,9 @@ export default function App() {
     setAudioEnabled(true)
   }
 
-  const playNote = useCallback((frequency: number) => {
+  const playNote = useCallback((frequency: number, maxVoices: number) => {
     const context = audioContext.current
-    if (!audioEnabled || !context || activeVoices.current >= 4) return
+    if (!audioEnabled || !context || activeVoices.current >= maxVoices) return
     activeVoices.current += 1
     const oscillator = context.createOscillator()
     const gain = context.createGain()
@@ -96,7 +96,7 @@ export default function App() {
   const handleEvent = useCallback((event: SimulationEvent) => {
     if (event.type === 'collision-note') {
       setLastNote(event)
-      playNote(event.frequency)
+      playNote(event.frequency, event.maxVoices ?? 4)
       addLedgerEntry('impact', `Impact note · ${displayName(event.first)}`, `${event.impact.toFixed(1)} m/s · ${event.frequency} Hz · tick ${event.tick}`)
     } else if (event.type === 'freeze-applied') {
       setFrozen(current => ({ ...current, [event.target]: event.expiresAtTick }))
@@ -134,7 +134,7 @@ export default function App() {
     setLiveStatus(result.message)
     if (result.ok) addLedgerEntry('law', 'Law applied to the engine', result.message)
   }, [addLedgerEntry])
-  const handleRestored = useCallback((snapshot: Experiment) => {
+  const readSnapshot = useCallback((snapshot: Experiment) => {
     const blueBodies = snapshot.bodies.filter(body => body.id.startsWith('blue-'))
     setUpward(blueBodies.length > 0 && blueBodies.every(body => body.gravityScale === -1))
     setCollisionNotes(snapshot.collisionNoteLaw !== null)
@@ -146,8 +146,11 @@ export default function App() {
     setFrozen(activeFrozen)
     setLastNote(null)
     setSimulationTick(snapshot.tick)
+  }, [])
+  const handleRestored = useCallback((snapshot: Experiment) => {
+    readSnapshot(snapshot)
     addLedgerEntry('restore', 'Snapshot restored', `tick ${snapshot.tick} · ${snapshot.bodies.length} bodies`)
-  }, [addLedgerEntry])
+  }, [addLedgerEntry, readSnapshot])
   const requestFreeze = () => {
     if (!selectedId) return
     setFreezeRequest({ id: selectedId, nonce: Date.now() })
@@ -277,9 +280,6 @@ export default function App() {
     if (!liveProposal) return
     const law = liveProposal.law
     setLawRequest({ nonce: nextNonce(), law })
-    setSelectedId(law.targets[0] ?? null)
-    if (law.operation === 'set-gravity-scale') setUpward(law.scale < 0)
-    if (law.operation === 'collision-note') setCollisionNotes(true)
     setLiveStatus(liveProposal.mode === 'prepared' ? 'Applying the prepared interpretation…' : 'Applying the validated live proposal…')
     addLedgerEntry('law', liveProposal.mode === 'prepared' ? 'Prepared interpretation applied' : 'Live proposal approved', liveProposal.interpretation)
   }
@@ -335,6 +335,7 @@ export default function App() {
         onImportResult={handleImportResult}
         onLawResult={handleLawResult}
         onRestored={handleRestored}
+        onLawApplied={readSnapshot}
         paused={paused}
         stepRequest={stepRequest}
         onTick={setSimulationTick}
