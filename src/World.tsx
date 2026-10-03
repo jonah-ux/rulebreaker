@@ -199,11 +199,11 @@ export function World(props: WorldProps) {
       const scene = new THREE.Scene()
       scene.background = new THREE.Color('#08131f')
       const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 100)
-      camera.position.set(12, 8.5, 16)
+      camera.position.set(9.5, 7, 12.5)
       const controls = new OrbitControls(camera, renderer.domElement)
       controls.enableDamping = true
       controls.dampingFactor = 0.08
-      controls.minDistance = 7
+      controls.minDistance = 5.5
       controls.maxDistance = 30
       controls.maxPolarAngle = Math.PI / 2.05
       controls.target.set(0, 4, 0)
@@ -228,10 +228,13 @@ export function World(props: WorldProps) {
           emissive: colors[object.color],
           emissiveIntensity: 0.06,
         })
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), material)
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material)
+        const haloMaterial = new THREE.MeshBasicMaterial({ color: colors[object.color], transparent: true, opacity: 0.8, wireframe: true })
+        const halo = new THREE.Mesh(new THREE.SphereGeometry(0.78, 16, 12), haloMaterial)
+        halo.visible = false
         mesh.userData.objectId = object.id
-        scene.add(mesh)
-        return { id: object.id, mesh, material }
+        scene.add(mesh, halo)
+        return { id: object.id, mesh, material, halo, haloMaterial }
       })
 
       container.replaceChildren(renderer.domElement)
@@ -307,15 +310,22 @@ export function World(props: WorldProps) {
           accumulator -= 1 / 60
           if (++sampleTicks % 12 === 0) propsRef.current.onHeight(simulation.bodies.get('blue-a')!.translation().y)
         }
-        for (const { id, mesh, material } of meshes) {
+        for (const { id, mesh, material, halo, haloMaterial } of meshes) {
           const body = simulation.bodies.get(id)!
           const position = body.translation()
           const rotation = body.rotation()
           mesh.position.set(position.x, position.y, position.z)
           mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w)
+          halo.position.copy(mesh.position)
+          halo.quaternion.copy(mesh.quaternion)
           const selected = selectedRef.current === id
+          const inverted = body.gravityScale() < 0
+          const frozen = !body.isMoving()
           mesh.scale.setScalar(selected ? 1.12 : 1)
-          material.emissiveIntensity = selected ? 0.4 : 0.06
+          halo.visible = selected
+          halo.scale.setScalar(selected ? 1.16 : 1)
+          haloMaterial.opacity = selected ? 0.78 : 0
+          material.emissiveIntensity = selected ? 0.4 : inverted ? 0.22 : frozen ? 0.16 : 0.06
         }
         controls.update()
         renderer.render(scene, camera)
