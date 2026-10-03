@@ -20,6 +20,8 @@ Use **Undo last law** to return to the previous typed-law state. **Save branch**
 
 The separate **Live / Provider** panel accepts a natural-language prompt, sends it only through the server-side adapter, validates the returned typed law, and waits for an explicit **Apply proposal** action. With no provider configuration it reports `live provider is not configured; use prepared mode` and leaves the prepared room untouched.
 
+Use **Run Impossible Room demo** to walk through collision notes, inverted blue gravity, and a three-second freeze in one no-key sequence. The final step leaves the controls available so you can invent the variation.
+
 ## Start locally
 
 Use Node.js 22.12 or newer and npm. From a clean clone:

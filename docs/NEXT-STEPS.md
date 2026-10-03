@@ -12,6 +12,10 @@ Versioned `rulebreaker/experiment/v1` snapshots now capture scene identity, phys
 
 `server/ai.ts` and the local Vite middleware now provide an optional OpenAI-compatible request path. The UI keeps live proposals separate from prepared mode, requires explicit apply approval, validates the response against the typed law schema, and fails closed when no provider is configured. The real-provider request → validated law → engine effect check is still outstanding until authorized provider configuration is present.
 
+## Guided demo slice delivered
+
+The no-key room now includes a three-step Impossible Room route: collision-note policy, inverted blue gravity, and selected-body freeze. It reports progress live and leaves the prepared controls ready for a variation after completion.
+
 ## First work for the build agent
 
 Exercise one configured compatible provider through the browser and record the applied engine effect. The prepared collision sound, temporary interaction rules, experiment loop, and adapter boundary are now part of the engine; keep their provider-free behavior separate from the live-AI path.

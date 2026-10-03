@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import sample from './scene.json'
 import { World } from './World'
 import type { Experiment, Law } from './domain'
@@ -42,10 +42,15 @@ export default function App() {
   const [liveProposal, setLiveProposal] = useState<LiveProposal | null>(null)
   const [liveStatus, setLiveStatus] = useState('Live AI is separate from prepared mode and requires server configuration.')
   const [liveBusy, setLiveBusy] = useState(false)
+  const [demoStep, setDemoStep] = useState(0)
+  const [demoRunning, setDemoRunning] = useState(false)
   const audioContext = useRef<AudioContext | null>(null)
   const activeVoices = useRef(0)
   const actionNonce = useRef(0)
   const liveAbort = useRef<AbortController | null>(null)
+  const demoTimers = useRef<number[]>([])
+
+  useEffect(() => () => { for (const timer of demoTimers.current) window.clearTimeout(timer) }, [])
 
   const enableAudio = () => {
     const AudioContextClass = window.AudioContext ?? (window as AudioWindow).webkitAudioContext
@@ -122,6 +127,10 @@ export default function App() {
     setFreezeRequest({ id: selectedId, nonce: Date.now() })
   }
   const resetRoom = () => {
+    for (const timer of demoTimers.current) window.clearTimeout(timer)
+    demoTimers.current = []
+    setDemoRunning(false)
+    setDemoStep(0)
     setUpward(false)
     setCollisionNotes(false)
     setFreezeOnClick(false)
@@ -143,6 +152,30 @@ export default function App() {
 
   const requestExport = () => setExportRequest({ nonce: nextNonce() })
   const requestImport = () => setImportRequest({ nonce: nextNonce(), payload: experimentText })
+  const runGuidedDemo = () => {
+    for (const timer of demoTimers.current) window.clearTimeout(timer)
+    demoTimers.current = []
+    resetRoom()
+    setDemoRunning(true)
+    setDemoStep(1)
+    demoTimers.current.push(window.setTimeout(() => {
+      setCollisionNotes(true)
+      setDemoStep(1)
+    }, 350))
+    demoTimers.current.push(window.setTimeout(() => {
+      setUpward(true)
+      setDemoStep(2)
+    }, 1500))
+    demoTimers.current.push(window.setTimeout(() => {
+      setSelectedId('blue-a')
+      setFreezeRequest({ id: 'blue-a', nonce: nextNonce() })
+      setDemoStep(3)
+    }, 2900))
+    demoTimers.current.push(window.setTimeout(() => {
+      setDemoRunning(false)
+      setDemoStep(4)
+    }, 5200))
+  }
   const requestLiveProposal = async () => {
     if (!livePrompt.trim()) {
       setLiveStatus('Describe a law before asking the live interpreter.')
@@ -204,6 +237,13 @@ export default function App() {
       <div className="live-form"><input aria-label="Live law prompt" value={livePrompt} onChange={event => setLivePrompt(event.target.value)} placeholder="e.g. Blue objects fall upward" maxLength={500} /><button className="small-button" disabled={liveBusy} onClick={requestLiveProposal}>{liveBusy ? 'Thinking…' : 'Interpret with live AI'}</button></div>
       <div className="live-status">{liveStatus}</div>
       {liveProposal && <div className="proposal-card"><div><span className="panel-kicker">VALIDATED PROPOSAL</span><strong>{liveProposal.interpretation}</strong><span>{liveProposal.model} · {liveProposal.law.operation}</span></div><button className="freeze-button" onClick={applyLiveProposal}>Apply proposal</button></div>}
+    </section>
+
+    <section className="panel demo-panel" aria-label="Impossible Room guided demo">
+      <div className="panel-heading"><div><span className="panel-kicker">GUIDED / IMPOSSIBLE ROOM</span><h2>See the three laws compose</h2></div><span className="law-count">{demoStep === 4 ? 'complete' : '3 steps'}</span></div>
+      <p className="panel-copy">Run the no-key route once: listen for impact events, invert blue gravity, then freeze a selected body. When it ends, invent a variation with the prepared controls.</p>
+      <div className="demo-actions"><button className="freeze-button" disabled={demoRunning} onClick={runGuidedDemo}>{demoRunning ? 'Demo running…' : 'Run Impossible Room demo'}</button><span aria-live="polite">{demoStep === 0 ? 'Ready when you are.' : demoStep === 1 ? 'Step 1 · collision-note law is active.' : demoStep === 2 ? 'Step 2 · blue prisms are rising.' : demoStep === 3 ? 'Step 3 · Blue prism A is frozen for three seconds.' : 'Demo complete · now write a stranger law.'}</span></div>
+      <ol className="demo-steps"><li className={demoStep >= 1 ? 'is-done' : ''}>Listen to meaningful collisions</li><li className={demoStep >= 2 ? 'is-done' : ''}>Invert blue gravity</li><li className={demoStep >= 3 ? 'is-done' : ''}>Freeze the selected body</li></ol>
     </section>
 
     <section className="stage" aria-label="Impossible Room">
