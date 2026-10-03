@@ -2,7 +2,7 @@
 
 A single Vite/React/TypeScript application with independent npm dependencies and a lockfile. Zod validates the versioned scene, law, event, and experiment formats. Prepared mode has no credential or provider dependency; the local Vite server optionally mounts one bounded provider route.
 
-`src/domain.ts` owns scene/law/event/experiment validation. `src/simulation.ts` owns the Rapier instance, fixed-step state, and atomic snapshot restore. `src/World.tsx` owns rendering, camera controls, raycast selection, animation, and history actions. `src/App.tsx` owns the prepared interaction panel, browser audio activation, and the local export/import surface. `src/scene.json` is the sample scene.
+`src/domain.ts` owns scene/law/event/experiment validation. `src/preparedInterpreter.ts` owns deterministic no-key natural-language composition and refusal of unsupported phrases. `src/simulation.ts` owns the Rapier instance, fixed-step state, and atomic snapshot restore. `src/World.tsx` owns rendering, camera controls, raycast selection, animation, and history actions. `src/App.tsx` owns the prepared interaction panel, browser audio activation, local export/import surface, proposal approval, and the bounded event ledger. `src/scene.json` is the sample scene.
 
 ## Law format
 

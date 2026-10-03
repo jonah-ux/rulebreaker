@@ -16,6 +16,10 @@ Versioned `rulebreaker/experiment/v1` snapshots now capture scene identity, phys
 
 The no-key room now includes a three-step Impossible Room route: collision-note policy, inverted blue gravity, and selected-body freeze. It reports progress live and leaves the prepared controls ready for a variation after completion.
 
+## Composer and ledger slice delivered
+
+The law prompt now supports deterministic no-key interpretations for alternate gravity, collision-note, and freeze phrasing. Proposals remain inspectable until explicit approval. A bounded event ledger records law applications, impact notes, freeze expiry, timeline actions, and snapshot restores so consequences remain visible after motion settles.
+
 ## First work for the build agent
 
 Exercise one configured compatible provider through the browser and record the applied engine effect. The prepared collision sound, temporary interaction rules, experiment loop, and adapter boundary are now part of the engine; keep their provider-free behavior separate from the live-AI path.

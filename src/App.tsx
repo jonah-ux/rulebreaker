@@ -2,11 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import sample from './scene.json'
 import { World } from './World'
 import type { Experiment, Law } from './domain'
+import { PreparedInterpreterError, interpretPreparedPrompt } from './preparedInterpreter'
 import type { SimulationEvent } from './simulation'
 import './App.css'
 
 type AudioWindow = Window & { webkitAudioContext?: typeof AudioContext }
-type LiveProposal = { mode: 'live-ai'; provider: string; model: string; interpretation: string; law: Law }
+type LiveProposal = { mode: 'prepared' | 'live-ai'; provider?: string; model: string; interpretation: string; law: Law }
+type LedgerTone = 'law' | 'impact' | 'freeze' | 'restore'
+type LedgerEntry = { id: number; tone: LedgerTone; title: string; detail: string }
 
 const objectNames: Record<string, string> = {
   'blue-a': 'Blue prism A',
@@ -44,11 +47,13 @@ export default function App() {
   const [liveBusy, setLiveBusy] = useState(false)
   const [demoStep, setDemoStep] = useState(0)
   const [demoRunning, setDemoRunning] = useState(false)
+  const [ledger, setLedger] = useState<LedgerEntry[]>([])
   const audioContext = useRef<AudioContext | null>(null)
   const activeVoices = useRef(0)
   const actionNonce = useRef(0)
   const liveAbort = useRef<AbortController | null>(null)
   const demoTimers = useRef<number[]>([])
+  const ledgerId = useRef(0)
 
   useEffect(() => () => { for (const timer of demoTimers.current) window.clearTimeout(timer) }, [])
 
@@ -78,24 +83,35 @@ export default function App() {
     oscillator.addEventListener('ended', () => { activeVoices.current = Math.max(0, activeVoices.current - 1) }, { once: true })
   }, [audioEnabled])
 
+  const addLedgerEntry = useCallback((tone: LedgerTone, title: string, detail: string) => {
+    ledgerId.current += 1
+    setLedger(current => [{ id: ledgerId.current, tone, title, detail }, ...current].slice(0, 16))
+  }, [])
+
   const handleEvent = useCallback((event: SimulationEvent) => {
     if (event.type === 'collision-note') {
       setLastNote(event)
       playNote(event.frequency)
+      addLedgerEntry('impact', `Impact note · ${displayName(event.first)}`, `${event.impact.toFixed(1)} m/s · ${event.frequency} Hz · tick ${event.tick}`)
     } else if (event.type === 'freeze-applied') {
       setFrozen(current => ({ ...current, [event.target]: event.expiresAtTick }))
+      addLedgerEntry('freeze', `Freeze engaged · ${displayName(event.target)}`, `expires at simulation tick ${event.expiresAtTick}`)
     } else {
       setFrozen(current => {
         const next = { ...current }
         delete next[event.target]
         return next
       })
+      addLedgerEntry('freeze', `Freeze expired · ${displayName(event.target)}`, 'dynamic motion restored')
     }
-  }, [playNote])
+  }, [addLedgerEntry, playNote])
 
   const selectObject = useCallback((id: string) => setSelectedId(id), [])
   const nextNonce = () => { actionNonce.current += 1; return actionNonce.current }
-  const runHistoryAction = (type: 'undo' | 'save-branch' | 'restore-branch') => setHistoryAction({ type, nonce: nextNonce() })
+  const runHistoryAction = (type: 'undo' | 'save-branch' | 'restore-branch') => {
+    setHistoryAction({ type, nonce: nextNonce() })
+    addLedgerEntry('restore', `Timeline action · ${type.replace('-', ' ')}`, 'engine snapshot path requested')
+  }
   const handleHistoryState = useCallback((undo: boolean, branch: boolean) => {
     setCanUndo(undo)
     setHasBranch(branch)
@@ -103,13 +119,16 @@ export default function App() {
   const handleExport = useCallback((payload: string) => {
     setExperimentText(payload)
     setExperimentStatus('Export ready. Reset the room, then import this snapshot to continue the experiment.')
-  }, [])
+    addLedgerEntry('restore', 'Experiment exported', 'rulebreaker/experiment/v1 snapshot ready')
+  }, [addLedgerEntry])
   const handleImportResult = useCallback((result: { ok: boolean; message: string }) => {
     setExperimentStatus(result.message)
-  }, [])
+    addLedgerEntry('restore', result.ok ? 'Experiment imported' : 'Experiment import refused', result.message)
+  }, [addLedgerEntry])
   const handleLawResult = useCallback((result: { ok: boolean; message: string }) => {
     setLiveStatus(result.message)
-  }, [])
+    if (result.ok) addLedgerEntry('law', 'Law applied to the engine', result.message)
+  }, [addLedgerEntry])
   const handleRestored = useCallback((snapshot: Experiment) => {
     const blueBodies = snapshot.bodies.filter(body => body.id.startsWith('blue-'))
     setUpward(blueBodies.length > 0 && blueBodies.every(body => body.gravityScale === -1))
@@ -121,10 +140,22 @@ export default function App() {
     for (const body of snapshot.bodies) if (body.frozenUntilTick !== null && body.frozenUntilTick > snapshot.tick) activeFrozen[body.id] = body.frozenUntilTick
     setFrozen(activeFrozen)
     setLastNote(null)
-  }, [])
+    addLedgerEntry('restore', 'Snapshot restored', `tick ${snapshot.tick} · ${snapshot.bodies.length} bodies`)
+  }, [addLedgerEntry])
   const requestFreeze = () => {
     if (!selectedId) return
     setFreezeRequest({ id: selectedId, nonce: Date.now() })
+    addLedgerEntry('freeze', `Freeze requested · ${displayName(selectedId)}`, '180 simulation ticks')
+  }
+  const toggleGravity = () => {
+    const next = !upward
+    setUpward(next)
+    addLedgerEntry('law', next ? 'Prepared law applied · inverted gravity' : 'Prepared law restored · ordinary gravity', 'scope: blue objects')
+  }
+  const toggleCollisionNotes = () => {
+    const next = !collisionNotes
+    setCollisionNotes(next)
+    addLedgerEntry('law', next ? 'Prepared law applied · collision notes' : 'Prepared law silenced', next ? 'threshold 1.2 m/s · cooldown 24 ticks · four voices' : 'collision-note policy removed')
   }
   const resetRoom = () => {
     for (const timer of demoTimers.current) window.clearTimeout(timer)
@@ -147,6 +178,7 @@ export default function App() {
     setCanUndo(false)
     setHasBranch(false)
     setExperimentStatus('Room reset. Import an experiment snapshot here to restore it.')
+    setLedger([])
     setReset(value => value + 1)
   }
 
@@ -160,21 +192,34 @@ export default function App() {
     setDemoStep(1)
     demoTimers.current.push(window.setTimeout(() => {
       setCollisionNotes(true)
+      addLedgerEntry('law', 'Guided step · collision notes', 'prepared collision-note policy active')
       setDemoStep(1)
     }, 350))
     demoTimers.current.push(window.setTimeout(() => {
       setUpward(true)
+      addLedgerEntry('law', 'Guided step · inverted gravity', 'blue prisms now rise')
       setDemoStep(2)
     }, 1500))
     demoTimers.current.push(window.setTimeout(() => {
       setSelectedId('blue-a')
       setFreezeRequest({ id: 'blue-a', nonce: nextNonce() })
+      addLedgerEntry('freeze', 'Guided step · freeze Blue prism A', 'three-second simulation timer')
       setDemoStep(3)
     }, 2900))
     demoTimers.current.push(window.setTimeout(() => {
       setDemoRunning(false)
       setDemoStep(4)
     }, 5200))
+  }
+  const requestPreparedProposal = () => {
+    try {
+      const proposal = interpretPreparedPrompt(livePrompt, sample, selectedId)
+      setLiveProposal({ ...proposal, model: 'prepared rules' })
+      setLiveStatus('Prepared interpretation ready. Review it before applying; no provider request was made.')
+    } catch (error) {
+      setLiveProposal(null)
+      setLiveStatus(error instanceof PreparedInterpreterError ? error.message : 'Prepared interpretation failed.')
+    }
   }
   const requestLiveProposal = async () => {
     if (!livePrompt.trim()) {
@@ -210,9 +255,13 @@ export default function App() {
   }
   const applyLiveProposal = () => {
     if (!liveProposal) return
-    setLawRequest({ nonce: nextNonce(), law: liveProposal.law })
-    setSelectedId(liveProposal.law.targets[0] ?? null)
-    setLiveStatus('Applying the validated live proposal…')
+    const law = liveProposal.law
+    setLawRequest({ nonce: nextNonce(), law })
+    setSelectedId(law.targets[0] ?? null)
+    if (law.operation === 'set-gravity-scale') setUpward(law.scale < 0)
+    if (law.operation === 'collision-note') setCollisionNotes(true)
+    setLiveStatus(liveProposal.mode === 'prepared' ? 'Applying the prepared interpretation…' : 'Applying the validated live proposal…')
+    addLedgerEntry('law', liveProposal.mode === 'prepared' ? 'Prepared interpretation applied' : 'Live proposal approved', liveProposal.interpretation)
   }
 
   const selectedName = selectedId ? displayName(selectedId) : 'Nothing selected'
@@ -233,10 +282,10 @@ export default function App() {
 
     <section className="panel live-panel" aria-label="Live AI interpreter">
       <div className="panel-heading"><div><span className="panel-kicker">LIVE / PROVIDER</span><h2>Ask the configured interpreter</h2></div><span className="live-badge">separate path</span></div>
-      <p className="panel-copy">The server sends your bounded prompt and scene description to the configured provider, validates the returned law, and shows it for approval. A missing provider leaves prepared mode untouched.</p>
-      <div className="live-form"><input aria-label="Live law prompt" value={livePrompt} onChange={event => setLivePrompt(event.target.value)} placeholder="e.g. Blue objects fall upward" maxLength={500} /><button className="small-button" disabled={liveBusy} onClick={requestLiveProposal}>{liveBusy ? 'Thinking…' : 'Interpret with live AI'}</button></div>
+      <p className="panel-copy">Describe a law in plain language. The local prepared interpreter works without a key; the optional server path can ask a configured provider. Every proposal is validated and waits for your approval.</p>
+      <div className="live-form"><input aria-label="Law prompt" value={livePrompt} onChange={event => setLivePrompt(event.target.value)} placeholder="e.g. make the blue shapes rise" maxLength={500} /><button className="small-button" onClick={requestPreparedProposal}>Try prepared</button><button className="small-button" disabled={liveBusy} onClick={requestLiveProposal}>{liveBusy ? 'Thinking…' : 'Ask live AI'}</button></div>
       <div className="live-status">{liveStatus}</div>
-      {liveProposal && <div className="proposal-card"><div><span className="panel-kicker">VALIDATED PROPOSAL</span><strong>{liveProposal.interpretation}</strong><span>{liveProposal.model} · {liveProposal.law.operation}</span></div><button className="freeze-button" onClick={applyLiveProposal}>Apply proposal</button></div>}
+      {liveProposal && <div className="proposal-card"><div><span className="panel-kicker">{liveProposal.mode === 'prepared' ? 'PREPARED INTERPRETATION' : 'VALIDATED LIVE PROPOSAL'}</span><strong>{liveProposal.interpretation}</strong><span>{liveProposal.model} · {liveProposal.law.operation}</span></div><button className="freeze-button" onClick={applyLiveProposal}>Apply proposal</button></div>}
     </section>
 
     <section className="panel demo-panel" aria-label="Impossible Room guided demo">
@@ -278,13 +327,13 @@ export default function App() {
         <article className={`law-card ${upward ? 'is-active' : ''}`}>
           <div className="law-index gravity-index">A</div>
           <div className="law-body"><h3>Blue objects fall upward</h3><p>Blue prisms use gravity scale −1. Red and gold keep ordinary gravity.</p><div className="law-meta"><span>{upward ? 'ACTIVE' : 'READY'}</span><span>scope: blue</span></div></div>
-          <button className="small-button" onClick={() => setUpward(current => !current)}>{upward ? 'Restore' : 'Apply'}</button>
+          <button className="small-button" onClick={toggleGravity}>{upward ? 'Restore' : 'Apply'}</button>
         </article>
 
         <article className={`law-card ${collisionNotes ? 'is-active' : ''}`}>
           <div className="law-index note-index">B</div>
           <div className="law-body"><h3>Every collision plays a note</h3><p>Impacts above 1.2 m/s trigger a short tone, with a 24-tick pair cooldown and four-voice cap.</p><div className="law-meta"><span>{collisionNotes ? 'ACTIVE' : 'READY'}</span><span>scope: all objects</span></div></div>
-          <button className="small-button" onClick={() => setCollisionNotes(current => !current)}>{collisionNotes ? 'Silence' : 'Listen'}</button>
+          <button className="small-button" onClick={toggleCollisionNotes}>{collisionNotes ? 'Silence' : 'Listen'}</button>
         </article>
 
         <article className={`law-card ${freezeOnClick ? 'is-active' : ''}`}>
@@ -319,6 +368,12 @@ export default function App() {
       </div>
       <textarea aria-label="Experiment JSON" value={experimentText} onChange={event => setExperimentText(event.target.value)} placeholder="Export a snapshot or paste a rulebreaker/experiment/v1 document here." rows={5} />
       <div className="import-row"><button className="freeze-button" disabled={!experimentText.trim()} onClick={requestImport}>Import into room</button><span>{experimentStatus}</span></div>
+    </section>
+
+    <section className="panel ledger-panel" aria-label="Recent room events">
+      <div className="panel-heading"><div><span className="panel-kicker">04 / EVENT LEDGER</span><h2>Watch the consequences accumulate</h2></div><span className="law-count">{ledger.length} recent</span></div>
+      <p className="panel-copy">The ledger records engine events and timeline actions so an experiment stays inspectable after the motion settles.</p>
+      {ledger.length === 0 ? <div className="ledger-empty">No events yet. Apply a law or run the guided room.</div> : <ol className="ledger-list">{ledger.slice(0, 8).map(entry => <li key={entry.id} className={`ledger-entry ${entry.tone}`}><span className="ledger-mark" /><div><strong>{entry.title}</strong><span>{entry.detail}</span></div></li>)}</ol>}
     </section>
 
     <section className="telemetry-row" aria-label="Live room telemetry">
