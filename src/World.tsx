@@ -5,6 +5,10 @@ import sample from './scene.json'
 import { createSimulation } from './simulation'
 import type { Experiment } from './domain'
 import type { SimulationEvent } from './simulation'
+import { summarizeRuntimeWindow } from './runtimeMetrics'
+import type { RuntimeMetrics } from './runtimeMetrics'
+
+export type { RuntimeMetrics } from './runtimeMetrics'
 
 type FreezeRequest = { id: string; nonce: number } | null
 type HistoryAction = { type: 'undo' | 'save-branch' | 'restore-branch'; nonce: number } | null
@@ -35,6 +39,7 @@ type WorldProps = {
   onLawResult: (result: RestoreResult) => void
   onRestored: (snapshot: Experiment) => void
   onTick: (tick: number) => void
+  onMetrics: (metrics: RuntimeMetrics) => void
 }
 
 const BLUE_GRAVITY = (targets: string[], upward: boolean) => ({
@@ -306,6 +311,9 @@ export function World(props: WorldProps) {
       let accumulator = 0
       let sampleTicks = 0
       let consumedStepNonce: number | null = null
+      let metricWindowStartedAt = previous
+      let metricFrameCount = 0
+      let metricStartTick = simulation.tick
       const animate = (now: number) => {
         accumulator += Math.min((now - previous) / 1000, 0.1)
         previous = now
@@ -348,6 +356,24 @@ export function World(props: WorldProps) {
         }
         controls.update()
         renderer.render(scene, camera)
+        metricFrameCount += 1
+        const metricElapsedMs = now - metricWindowStartedAt
+        if (metricElapsedMs >= 500) {
+          current.onMetrics(summarizeRuntimeWindow({
+            elapsedMs: metricElapsedMs,
+            frameCount: metricFrameCount,
+            tickDelta: simulation.tick - metricStartTick,
+            drawCalls: renderer.info.render.calls,
+            triangles: renderer.info.render.triangles,
+            geometries: renderer.info.memory.geometries,
+            textures: renderer.info.memory.textures,
+            pixelRatio: renderer.getPixelRatio(),
+            objectCount: simulation.bodies.size,
+          }))
+          metricWindowStartedAt = now
+          metricFrameCount = 0
+          metricStartTick = simulation.tick
+        }
         frame = requestAnimationFrame(animate)
       }
       frame = requestAnimationFrame(animate)

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import sample from './scene.json'
 import { World } from './World'
+import type { RuntimeMetrics } from './runtimeMetrics'
 import type { Experiment, Law } from './domain'
 import { PreparedInterpreterError, interpretPreparedPrompt } from './preparedInterpreter'
 import type { SimulationEvent } from './simulation'
@@ -51,6 +52,7 @@ export default function App() {
   const [paused, setPaused] = useState(false)
   const [stepRequest, setStepRequest] = useState<{ nonce: number } | null>(null)
   const [simulationTick, setSimulationTick] = useState(0)
+  const [runtimeMetrics, setRuntimeMetrics] = useState<RuntimeMetrics | null>(null)
   const audioContext = useRef<AudioContext | null>(null)
   const activeVoices = useRef(0)
   const actionNonce = useRef(0)
@@ -194,6 +196,7 @@ export default function App() {
     setPaused(false)
     setStepRequest(null)
     setSimulationTick(0)
+    setRuntimeMetrics(null)
     setExperimentStatus('Room reset. Import an experiment snapshot here to restore it.')
     setLedger([])
     setReset(value => value + 1)
@@ -335,6 +338,7 @@ export default function App() {
         paused={paused}
         stepRequest={stepRequest}
         onTick={setSimulationTick}
+        onMetrics={setRuntimeMetrics}
       />
       <div className="stage-caption"><span>DRAG TO ORBIT</span><span>SCROLL TO ZOOM</span><span>CLICK TO SELECT</span></div>
       <div className="stage-controls" aria-label="Simulation controls"><button className="stage-control-button" onClick={togglePaused}>{paused ? 'Resume room' : 'Pause room'}</button><button className="stage-control-button" disabled={!paused} onClick={stepSimulation}>Step 1 tick</button><span className={paused ? 'clock-state paused' : 'clock-state'}>{paused ? 'PAUSED' : 'LIVE'} · TICK {simulationTick}</span></div>
@@ -401,6 +405,17 @@ export default function App() {
       <div><span className="telemetry-label">BLUE HEIGHT</span><strong>{height.toFixed(2)} <small>m</small></strong><span>{upward ? 'rising under inverted gravity' : 'moving under ordinary gravity'}</span></div>
       <div><span className="telemetry-label">LAST IMPACT</span><strong>{lastNote ? `${lastNote.impact.toFixed(1)} m/s` : 'waiting'}</strong><span>{lastNote ? `${displayName(lastNote.first)} → ${lastNote.second === 'room' ? 'room boundary' : displayName(lastNote.second)}` : 'turn on collision notes to listen'}</span></div>
       <div><span className="telemetry-label">UNDO / BRANCH</span><strong>{canUndo ? 'Ready' : 'Waiting'}</strong><span>{hasBranch ? 'One branch is saved locally.' : 'Save a branch before trying a new path.'}</span></div>
+    </section>
+
+    <section className="panel runtime-panel" aria-label="Runtime telemetry">
+      <div className="panel-heading"><div><span className="panel-kicker">05 / RUNTIME</span><h2>Measure the room</h2></div><span className="law-count">{runtimeMetrics ? 'live sample' : 'warming up'}</span></div>
+      <p className="panel-copy">Measured from the browser’s render loop over the latest half-second window. Physics cadence is Rapier ticks per second; resource counts are renderer-reported scene totals.</p>
+      <div className="runtime-grid">
+        <div><span className="telemetry-label">FRAME TIME</span><strong>{runtimeMetrics ? <>{runtimeMetrics.frameMs.toFixed(1)} <small>ms</small></> : '—'}</strong><span>{runtimeMetrics ? `${runtimeMetrics.fps.toFixed(1)} measured FPS` : 'Collecting a sample…'}</span></div>
+        <div><span className="telemetry-label">PHYSICS CADENCE</span><strong>{runtimeMetrics ? <>{runtimeMetrics.physicsHz.toFixed(1)} <small>Hz</small></> : '—'}</strong><span>{runtimeMetrics ? `${runtimeMetrics.tickDelta} ticks in ${Math.round(runtimeMetrics.sampleWindowMs)} ms` : 'Waiting for fixed-step samples'}</span></div>
+        <div><span className="telemetry-label">RENDER WORK</span><strong>{runtimeMetrics ? <>{runtimeMetrics.drawCalls} <small>calls</small></> : '—'}</strong><span>{runtimeMetrics ? `${runtimeMetrics.triangles} triangles per frame` : 'Renderer counters unavailable'}</span></div>
+        <div><span className="telemetry-label">SCENE RESOURCES</span><strong>{runtimeMetrics ? <>{runtimeMetrics.objectCount} <small>bodies</small></> : '—'}</strong><span>{runtimeMetrics ? `${runtimeMetrics.geometries} geometries · ${runtimeMetrics.textures} textures · DPR ${runtimeMetrics.pixelRatio.toFixed(1)}` : 'Collecting renderer totals'}</span></div>
+      </div>
     </section>
 
     <footer><span>Prepared behavior is intentionally labeled.</span><span>Next: live model proposals and replay proof.</span><a href="https://github.com/jonah-ux/rulebreaker" target="_blank" rel="noreferrer">View source ↗</a></footer>

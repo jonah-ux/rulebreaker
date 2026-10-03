@@ -20,6 +20,8 @@ Rapier advances at a fixed 1/60-second step. Collision events are collected thro
 
 The stage control surface exposes that same clock for inspection. `Pause room` clears the render accumulator and stops calls to `simulation.step`; `Step 1 tick` is accepted only while paused and consumes one nonce so one click produces one Rapier step, one clock increment, and one event-ledger entry. Resuming returns to the accumulator-driven fixed-step loop. The displayed tick is therefore engine time, not an estimate derived from animation frames.
 
+`runtimeMetrics.ts` summarizes a bounded browser sample window. The renderer loop measures elapsed wall time, rendered frames, Rapier tick delta, and Three.js renderer counters, then publishes one `RuntimeMetrics` value after at least 500 ms. `frameMs` and `fps` describe presentation cadence; `physicsHz` describes engine ticks per second; draw calls, triangles, geometries, textures, object count, and pixel ratio describe the observed local scene budget. The panel intentionally labels these as local measurements rather than a device-independent benchmark.
+
 The sample scene keeps its dynamic bodies awake so gravity changes can affect objects after they settle against a boundary. Sleeping-body optimization and cross-browser determinism remain outside this slice.
 
 ## Experiment format and history

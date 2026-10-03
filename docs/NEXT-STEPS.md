@@ -24,6 +24,10 @@ The law prompt now supports deterministic no-key interpretations for alternate g
 
 The stage now exposes pause, resume, and one-tick stepping over the actual Rapier simulation. A visible simulation clock and ledger entries make fixed-step inspection explicit: pause holds the world, each step advances one 1/60-second tick, and resume returns to live accumulation. Browser evidence covers the control sequence; the provider-free boundary remains intact.
 
+## Runtime measurement slice delivered
+
+The control room now samples local browser behavior over bounded half-second windows. It reports frame time, measured FPS, Rapier physics cadence, renderer draw calls/triangles, geometry and texture counts, object count, and device pixel ratio. These measurements are intentionally scoped to the current browser and machine; they are evidence for inspection, not a cross-browser performance claim.
+
 ## First work for the build agent
 
 Exercise one configured compatible provider through the browser and record the applied engine effect. The prepared collision sound, temporary interaction rules, experiment loop, and adapter boundary are now part of the engine; keep their provider-free behavior separate from the live-AI path.

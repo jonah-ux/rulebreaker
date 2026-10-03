@@ -26,6 +26,8 @@ Use **Run Impossible Room demo** to walk through collision notes, inverted blue 
 
 The room also exposes its simulation clock. **Pause room** stops the actual Rapier world while the render stays inspectable; **Step 1 tick** advances exactly one fixed 1/60-second simulation step while paused. The `LIVE · TICK` readout is simulation time, not render-frame count, and pause, resume, and single-step actions are recorded in the event ledger.
 
+The **Runtime** panel reports measured browser behavior over the latest half-second window: average frame time, measured render FPS, Rapier ticks per second, renderer draw calls and triangles, scene geometry/texture counts, object count, and device pixel ratio. Pausing should drive physics cadence toward zero while render metrics continue sampling; these are local observations for the current browser and machine, not cross-browser performance guarantees.
+
 ## Start locally
 
 Use Node.js 22.12 or newer and npm. From a clean clone:
