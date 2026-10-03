@@ -4,7 +4,7 @@
 
 A browser laboratory for inspectable laws in a simulated world.
 
-**Status: the first playable physics slice is shipped in source.** The room, typed laws, object selection, collision-note policy, and temporary freeze are usable without credentials. The live model adapter, undo/branch history, and experiment import/export remain future slices.
+**Status: the first playable physics and experiment slices are shipped in source.** The room, typed laws, object selection, collision-note policy, temporary freeze, undo, branching, and local experiment snapshots are usable without credentials. The live model adapter remains a future slice.
 
 ## Try the room
 
@@ -15,6 +15,8 @@ Open the app and use the three prepared laws in the panel:
 - **Click to freeze for three seconds** adds a 180-tick simulation-time freeze. Select a body in the inspector, use the freeze button, or enter click mode and click a shape. The body returns to dynamic motion when the timer expires.
 
 Drag the room to orbit, scroll to zoom, and click a shape to select it. The inspector is keyboard-friendly, and the prepared/live-AI distinction stays visible in the mode card. No model credentials are required.
+
+Use **Undo last law** to return to the previous typed-law state. **Save branch** stores one local timeline point and **Restore branch** returns to it. **Export JSON** writes a `rulebreaker/experiment/v1` document into the inspector; reset the room and use **Import into room** to validate and restore that snapshot.
 
 ## Start locally
 
@@ -37,13 +39,13 @@ This runs lint, TypeScript, engine/schema checks, and the production build. CI r
 
 ## Build the product
 
-Start with [AGENTS.md](AGENTS.md), then give an agent the complete [build prompt](docs/BUILD-PROMPT.md). [NEXT-STEPS.md](docs/NEXT-STEPS.md) tracks the delivered physics slice and the remaining first-release work.
+Start with [AGENTS.md](AGENTS.md), then give an agent the complete [build prompt](docs/BUILD-PROMPT.md). [NEXT-STEPS.md](docs/NEXT-STEPS.md) tracks the delivered physics and experiment slices and the remaining first-release work.
 
-The next coherent slices are the server-side AI law adapter, complete state restore, branching, and experiment import/export. Keep prepared behavior separate from live provider output until a real configured provider has completed the request → validation → engine-effect path.
+The next coherent slice is the server-side AI law adapter. Keep prepared behavior separate from live provider output until a real configured provider has completed the request → validation → engine-effect path.
 
 ## Architecture
 
-`src/domain.ts` owns scene and versioned law validation. `src/simulation.ts` owns the Rapier world, fixed 60 Hz stepping, typed gravity/collision/freeze operations, collision cooldowns, freeze expiry, and bounded event output. `src/World.tsx` owns the Three.js renderer, orbit controls, raycast selection, and presentation of observed engine state. `src/App.tsx` owns prepared law controls and the explicit Web Audio gesture. `src/scene.json` is the sample scene.
+`src/domain.ts` owns scene, law, event, and versioned experiment validation. `src/simulation.ts` owns the Rapier world, fixed 60 Hz stepping, typed gravity/collision/freeze operations, collision cooldowns, freeze expiry, bounded event output, and atomic snapshot restore. `src/World.tsx` owns the Three.js renderer, orbit controls, raycast selection, and presentation of observed engine state plus history actions. `src/App.tsx` owns prepared law controls, the explicit Web Audio gesture, and the local experiment text surface. `src/scene.json` is the sample scene.
 
 Keep model output as validated data and provider secrets on a future server-side adapter. There is still no server or provider connection in the prepared slice; no environment credential is needed or read. See [architecture](docs/ARCHITECTURE.md).
 

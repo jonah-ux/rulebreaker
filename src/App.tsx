@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import sample from './scene.json'
 import { World } from './World'
+import type { Experiment } from './domain'
 import type { SimulationEvent } from './simulation'
 import './App.css'
 
@@ -28,8 +29,16 @@ export default function App() {
   const [lastNote, setLastNote] = useState<Extract<SimulationEvent, { type: 'collision-note' }> | null>(null)
   const [frozen, setFrozen] = useState<Record<string, number>>({})
   const [audioEnabled, setAudioEnabled] = useState(false)
+  const [historyAction, setHistoryAction] = useState<{ type: 'undo' | 'save-branch' | 'restore-branch'; nonce: number } | null>(null)
+  const [exportRequest, setExportRequest] = useState<{ nonce: number } | null>(null)
+  const [importRequest, setImportRequest] = useState<{ nonce: number; payload: string } | null>(null)
+  const [canUndo, setCanUndo] = useState(false)
+  const [hasBranch, setHasBranch] = useState(false)
+  const [experimentText, setExperimentText] = useState('')
+  const [experimentStatus, setExperimentStatus] = useState('Snapshots include laws, timers, physics state, cooldowns, and selection.')
   const audioContext = useRef<AudioContext | null>(null)
   const activeVoices = useRef(0)
+  const actionNonce = useRef(0)
 
   const enableAudio = () => {
     const AudioContextClass = window.AudioContext ?? (window as AudioWindow).webkitAudioContext
@@ -73,6 +82,31 @@ export default function App() {
   }, [playNote])
 
   const selectObject = useCallback((id: string) => setSelectedId(id), [])
+  const nextNonce = () => { actionNonce.current += 1; return actionNonce.current }
+  const runHistoryAction = (type: 'undo' | 'save-branch' | 'restore-branch') => setHistoryAction({ type, nonce: nextNonce() })
+  const handleHistoryState = useCallback((undo: boolean, branch: boolean) => {
+    setCanUndo(undo)
+    setHasBranch(branch)
+  }, [])
+  const handleExport = useCallback((payload: string) => {
+    setExperimentText(payload)
+    setExperimentStatus('Export ready. Reset the room, then import this snapshot to continue the experiment.')
+  }, [])
+  const handleImportResult = useCallback((result: { ok: boolean; message: string }) => {
+    setExperimentStatus(result.message)
+  }, [])
+  const handleRestored = useCallback((snapshot: Experiment) => {
+    const blueBodies = snapshot.bodies.filter(body => body.id.startsWith('blue-'))
+    setUpward(blueBodies.length > 0 && blueBodies.every(body => body.gravityScale === -1))
+    setCollisionNotes(snapshot.collisionNoteLaw !== null)
+    setSelectedId(snapshot.selectedId)
+    setFreezeRequest(null)
+    setHeight(snapshot.bodies.find(body => body.id === 'blue-a')?.position[1] ?? 0.5)
+    const activeFrozen: Record<string, number> = {}
+    for (const body of snapshot.bodies) if (body.frozenUntilTick !== null && body.frozenUntilTick > snapshot.tick) activeFrozen[body.id] = body.frozenUntilTick
+    setFrozen(activeFrozen)
+    setLastNote(null)
+  }, [])
   const requestFreeze = () => {
     if (!selectedId) return
     setFreezeRequest({ id: selectedId, nonce: Date.now() })
@@ -85,8 +119,17 @@ export default function App() {
     setFreezeRequest(null)
     setFrozen({})
     setLastNote(null)
+    setHistoryAction(null)
+    setExportRequest(null)
+    setImportRequest(null)
+    setCanUndo(false)
+    setHasBranch(false)
+    setExperimentStatus('Room reset. Import an experiment snapshot here to restore it.')
     setReset(value => value + 1)
   }
+
+  const requestExport = () => setExportRequest({ nonce: nextNonce() })
+  const requestImport = () => setImportRequest({ nonce: nextNonce(), payload: experimentText })
 
   const selectedName = selectedId ? displayName(selectedId) : 'Nothing selected'
   const frozenNames = Object.keys(frozen).map(displayName)
@@ -112,9 +155,16 @@ export default function App() {
         freezeOnClick={freezeOnClick}
         freezeRequest={freezeRequest}
         selectedId={selectedId}
+        historyAction={historyAction}
+        exportRequest={exportRequest}
+        importRequest={importRequest}
         onHeight={setHeight}
         onSelected={selectObject}
         onEvent={handleEvent}
+        onHistoryState={handleHistoryState}
+        onExport={handleExport}
+        onImportResult={handleImportResult}
+        onRestored={handleRestored}
       />
       <div className="stage-caption"><span>DRAG TO ORBIT</span><span>SCROLL TO ZOOM</span><span>CLICK TO SELECT</span></div>
     </section>
@@ -157,12 +207,25 @@ export default function App() {
       </aside>
     </section>
 
+    <section className="panel experiment-panel" aria-label="Experiment history and import">
+      <div className="panel-heading"><div><span className="panel-kicker">03 / EXPERIMENT</span><h2>Undo, branch, and carry the room</h2></div><span className="law-count">{canUndo ? 'undo ready' : 'new timeline'}</span></div>
+      <p className="panel-copy">Snapshots use <code>rulebreaker/experiment/v1</code>. They restore physics state, active laws, freeze timers, collision cooldowns, and the selected body without another model request.</p>
+      <div className="experiment-actions">
+        <button className="secondary-button" disabled={!canUndo} onClick={() => runHistoryAction('undo')}>Undo last law</button>
+        <button className="secondary-button" onClick={() => runHistoryAction('save-branch')}>Save branch</button>
+        <button className="secondary-button" disabled={!hasBranch} onClick={() => runHistoryAction('restore-branch')}>Restore branch</button>
+        <button className="secondary-button" onClick={requestExport}>Export JSON</button>
+      </div>
+      <textarea aria-label="Experiment JSON" value={experimentText} onChange={event => setExperimentText(event.target.value)} placeholder="Export a snapshot or paste a rulebreaker/experiment/v1 document here." rows={5} />
+      <div className="import-row"><button className="freeze-button" disabled={!experimentText.trim()} onClick={requestImport}>Import into room</button><span>{experimentStatus}</span></div>
+    </section>
+
     <section className="telemetry-row" aria-label="Live room telemetry">
       <div><span className="telemetry-label">BLUE HEIGHT</span><strong>{height.toFixed(2)} <small>m</small></strong><span>{upward ? 'rising under inverted gravity' : 'moving under ordinary gravity'}</span></div>
       <div><span className="telemetry-label">LAST IMPACT</span><strong>{lastNote ? `${lastNote.impact.toFixed(1)} m/s` : 'waiting'}</strong><span>{lastNote ? `${displayName(lastNote.first)} → ${lastNote.second === 'room' ? 'room boundary' : displayName(lastNote.second)}` : 'turn on collision notes to listen'}</span></div>
-      <div><span className="telemetry-label">UNDO / BRANCH</span><strong>Next slice</strong><span>State history arrives after the typed laws.</span></div>
+      <div><span className="telemetry-label">UNDO / BRANCH</span><strong>{canUndo ? 'Ready' : 'Waiting'}</strong><span>{hasBranch ? 'One branch is saved locally.' : 'Save a branch before trying a new path.'}</span></div>
     </section>
 
-    <footer><span>Prepared behavior is intentionally labeled.</span><span>Next: live model proposals, undo, branching, and replay.</span><a href="https://github.com/jonah-ux/rulebreaker" target="_blank" rel="noreferrer">View source ↗</a></footer>
+    <footer><span>Prepared behavior is intentionally labeled.</span><span>Next: live model proposals and replay proof.</span><a href="https://github.com/jonah-ux/rulebreaker" target="_blank" rel="noreferrer">View source ↗</a></footer>
   </main>
 }

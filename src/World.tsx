@@ -3,9 +3,14 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import sample from './scene.json'
 import { createSimulation } from './simulation'
+import type { Experiment } from './domain'
 import type { SimulationEvent } from './simulation'
 
 type FreezeRequest = { id: string; nonce: number } | null
+type HistoryAction = { type: 'undo' | 'save-branch' | 'restore-branch'; nonce: number } | null
+type ExportRequest = { nonce: number } | null
+type ImportRequest = { nonce: number; payload: string } | null
+type RestoreResult = { ok: boolean; message: string }
 
 type WorldProps = {
   upward: boolean
@@ -13,9 +18,16 @@ type WorldProps = {
   freezeOnClick: boolean
   freezeRequest: FreezeRequest
   selectedId: string | null
+  historyAction: HistoryAction
+  exportRequest: ExportRequest
+  importRequest: ImportRequest
   onHeight: (value: number) => void
   onSelected: (id: string) => void
   onEvent: (event: SimulationEvent) => void
+  onHistoryState: (canUndo: boolean, hasBranch: boolean) => void
+  onExport: (payload: string) => void
+  onImportResult: (result: RestoreResult) => void
+  onRestored: (snapshot: Experiment) => void
 }
 
 const BLUE_GRAVITY = (targets: string[], upward: boolean) => ({
@@ -47,8 +59,16 @@ export function World(props: WorldProps) {
   const propsRef = useRef(props)
   const selectedRef = useRef(props.selectedId)
   const lastFreezeNonce = useRef<number | null>(null)
+  const historyRef = useRef<Experiment[]>([])
+  const branchRef = useRef<Experiment | null>(null)
+  const lastRuleStateRef = useRef({ upward: props.upward, collisionNotes: props.collisionNotes, freezeNonce: props.freezeRequest?.nonce ?? null })
+  const suppressNextHistoryRef = useRef(false)
+  const lastHistoryActionNonce = useRef<number | null>(null)
+  const lastExportNonce = useRef<number | null>(null)
+  const lastImportNonce = useRef<number | null>(null)
+  const readyRef = useRef(false)
 
-  const { upward, collisionNotes, freezeRequest, onEvent } = props
+  const { upward, collisionNotes, freezeRequest, historyAction, exportRequest, importRequest, onEvent } = props
 
   useEffect(() => {
     propsRef.current = props
@@ -57,7 +77,19 @@ export function World(props: WorldProps) {
 
   useEffect(() => {
     const simulation = simulationRef.current
+    const nextRuleState = { upward, collisionNotes, freezeNonce: freezeRequest?.nonce ?? null }
+    const changed = nextRuleState.upward !== lastRuleStateRef.current.upward
+      || nextRuleState.collisionNotes !== lastRuleStateRef.current.collisionNotes
+      || nextRuleState.freezeNonce !== lastRuleStateRef.current.freezeNonce
+    if (!changed) return
+    lastRuleStateRef.current = nextRuleState
     if (!simulation) return
+    if (readyRef.current && !suppressNextHistoryRef.current) {
+      historyRef.current.push(simulation.snapshot(selectedRef.current))
+      if (historyRef.current.length > 24) historyRef.current.shift()
+      propsRef.current.onHistoryState(historyRef.current.length > 0, branchRef.current !== null)
+    }
+    suppressNextHistoryRef.current = false
     const blueTargets = simulation.scene.objects.filter(object => object.color === 'blue').map(object => object.id)
     const allTargets = simulation.scene.objects.map(object => object.id)
     simulation.apply(BLUE_GRAVITY(blueTargets, upward))
@@ -65,9 +97,65 @@ export function World(props: WorldProps) {
     else simulation.clearCollisionNoteLaw()
     if (freezeRequest && freezeRequest.nonce !== lastFreezeNonce.current) {
       lastFreezeNonce.current = freezeRequest.nonce
-      for (const event of simulation.apply(FREEZE(freezeRequest.id))) onEvent(event)
+      for (const event of simulation.apply(FREEZE(freezeRequest.id))) propsRef.current.onEvent(event)
     }
   }, [upward, collisionNotes, freezeRequest, onEvent])
+
+  useEffect(() => {
+    const simulation = simulationRef.current
+    if (!simulation) return
+    const notifyHistory = () => propsRef.current.onHistoryState(historyRef.current.length > 0, branchRef.current !== null)
+    const restoreSnapshot = (snapshot: Experiment) => {
+      const restored = simulation.restore(snapshot)
+      lastRuleStateRef.current = {
+        upward: restored.bodies.filter(body => body.id.startsWith('blue-')).every(body => body.gravityScale === -1),
+        collisionNotes: restored.collisionNoteLaw !== null,
+        freezeNonce: null,
+      }
+      propsRef.current.onRestored(restored)
+      suppressNextHistoryRef.current = false
+      notifyHistory()
+    }
+    if (historyAction && historyAction.nonce !== lastHistoryActionNonce.current) {
+      lastHistoryActionNonce.current = historyAction.nonce
+      if (historyAction.type === 'undo') {
+        const previous = historyRef.current.pop()
+        if (previous) restoreSnapshot(previous)
+        else notifyHistory()
+      } else if (historyAction.type === 'save-branch') {
+        branchRef.current = simulation.snapshot(selectedRef.current)
+        notifyHistory()
+      } else if (branchRef.current) {
+        historyRef.current.push(simulation.snapshot(selectedRef.current))
+        if (historyRef.current.length > 24) historyRef.current.shift()
+        restoreSnapshot(branchRef.current)
+      }
+    }
+    if (exportRequest && exportRequest.nonce !== lastExportNonce.current) {
+      lastExportNonce.current = exportRequest.nonce
+      propsRef.current.onExport(JSON.stringify(simulation.snapshot(selectedRef.current), null, 2))
+    }
+    if (importRequest && importRequest.nonce !== lastImportNonce.current) {
+      lastImportNonce.current = importRequest.nonce
+      try {
+        const current = simulation.snapshot(selectedRef.current)
+        const restored = simulation.restore(JSON.parse(importRequest.payload))
+        historyRef.current.push(current)
+        if (historyRef.current.length > 24) historyRef.current.shift()
+        lastRuleStateRef.current = {
+          upward: restored.bodies.filter(body => body.id.startsWith('blue-')).every(body => body.gravityScale === -1),
+          collisionNotes: restored.collisionNoteLaw !== null,
+          freezeNonce: null,
+        }
+        propsRef.current.onRestored(restored)
+        suppressNextHistoryRef.current = false
+        propsRef.current.onImportResult({ ok: true, message: 'Experiment imported into the live room.' })
+        notifyHistory()
+      } catch (error) {
+        propsRef.current.onImportResult({ ok: false, message: error instanceof Error ? error.message : 'Experiment import was refused.' })
+      }
+    }
+  }, [historyAction, exportRequest, importRequest])
 
   useEffect(() => {
     const container = host.current!
@@ -149,6 +237,8 @@ export function World(props: WorldProps) {
         }
       }
       applyCurrentRules()
+      readyRef.current = true
+      propsRef.current.onHistoryState(historyRef.current.length > 0, branchRef.current !== null)
 
       const raycaster = new THREE.Raycaster()
       const pointer = new THREE.Vector2()
@@ -174,6 +264,9 @@ export function World(props: WorldProps) {
         const current = propsRef.current
         current.onSelected(id)
         if (current.freezeOnClick) {
+          historyRef.current.push(simulation.snapshot(id))
+          if (historyRef.current.length > 24) historyRef.current.shift()
+          current.onHistoryState(historyRef.current.length > 0, branchRef.current !== null)
           for (const eventItem of simulation.apply(FREEZE(id))) current.onEvent(eventItem)
         }
       }

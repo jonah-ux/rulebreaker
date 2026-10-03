@@ -117,4 +117,51 @@ describe('typed law boundary', () => {
       expect(body.translation().y).toBeGreaterThan(releasedHeight)
     } finally { simulation.dispose() }
   })
+  it('round-trips a complete experiment snapshot and replays a branch without a provider call', async () => {
+    const simulation = await createSimulation(sample)
+    try {
+      simulation.apply({
+        schema: 'rulebreaker/law/v1',
+        operation: 'set-gravity-scale',
+        targets: ['blue-a'],
+        scale: -1,
+      })
+      simulation.apply({
+        schema: 'rulebreaker/law/v1',
+        operation: 'collision-note',
+        targets: allTargets,
+        threshold: 0.5,
+        cooldownTicks: 24,
+        maxVoices: 4,
+      })
+      for (let tick = 0; tick < 24; tick++) simulation.step()
+      const branch = simulation.snapshot('blue-a')
+      simulation.apply({ schema: 'rulebreaker/law/v1', operation: 'temporary-freeze', targets: ['blue-a'], durationTicks: 180 })
+      for (let tick = 0; tick < 18; tick++) simulation.step()
+      simulation.restore(branch)
+      expect(simulation.tick).toBe(branch.tick)
+      expect(simulation.activeCollisionNoteLaw?.cooldownTicks).toBe(24)
+      expect(simulation.frozenTargets.has('blue-a')).toBe(false)
+      expect(simulation.bodies.get('blue-a')!.gravityScale()).toBe(-1)
+      expect(simulation.snapshot('blue-a')).toEqual(branch)
+
+      simulation.apply({ schema: 'rulebreaker/law/v1', operation: 'set-gravity-scale', targets: ['blue-a'], scale: -1 })
+      for (let tick = 0; tick < 30; tick++) simulation.step()
+      const firstReplayHeight = simulation.bodies.get('blue-a')!.translation().y
+      simulation.restore(branch)
+      simulation.apply({ schema: 'rulebreaker/law/v1', operation: 'set-gravity-scale', targets: ['blue-a'], scale: -1 })
+      for (let tick = 0; tick < 30; tick++) simulation.step()
+      expect(simulation.bodies.get('blue-a')!.translation().y).toBeCloseTo(firstReplayHeight, 6)
+    } finally { simulation.dispose() }
+  })
+  it('refuses invalid experiment versions and broken body references atomically', async () => {
+    const simulation = await createSimulation(sample)
+    try {
+      const snapshot = simulation.snapshot()
+      const before = simulation.bodies.get('blue-a')!.translation().y
+      expect(() => simulation.restore({ ...snapshot, schema: 'rulebreaker/experiment/v0' })).toThrow()
+      expect(() => simulation.restore({ ...snapshot, bodies: snapshot.bodies.map((body, index) => index === 0 ? { ...body, id: 'missing' } : body) })).toThrow()
+      expect(simulation.bodies.get('blue-a')!.translation().y).toBe(before)
+    } finally { simulation.dispose() }
+  })
 })

@@ -1,16 +1,13 @@
 import RAPIER from '@dimforge/rapier3d-compat'
-import { SceneSchema, validateLaw } from './domain'
-import type { Law } from './domain'
+import { SceneSchema, validateExperiment, validateLaw } from './domain'
+import type { Experiment, Law, SimulationEvent } from './domain'
 
 const ready = RAPIER.init()
 
-export type SimulationEvent =
-  | { type: 'collision-note'; tick: number; first: string; second: string; impact: number; frequency: number }
-  | { type: 'freeze-applied'; target: string; expiresAtTick: number }
-  | { type: 'freeze-expired'; target: string }
-
 type CollisionNoteLaw = Extract<Law, { operation: 'collision-note' }>
 type FreezeState = { expiresAtTick: number }
+
+export type { SimulationEvent } from './domain'
 
 function pairKey(first: string, second: string) {
   return [first, second].sort().join('|')
@@ -103,6 +100,66 @@ export async function createSimulation(value: unknown) {
     }
   }
 
+  const snapshot = (selectedId: string | null = null): Experiment => ({
+    schema: 'rulebreaker/experiment/v1',
+    engine: 'rulebreaker/engine/v1',
+    scene,
+    tick,
+    bodies: scene.objects.map(object => {
+      const body = bodies.get(object.id)!
+      const position = body.translation()
+      const rotation = body.rotation()
+      const linearVelocity = body.linvel()
+      const angularVelocity = body.angvel()
+      return {
+        id: object.id,
+        position: [position.x, position.y, position.z],
+        rotation: [rotation.x, rotation.y, rotation.z, rotation.w],
+        linearVelocity: [linearVelocity.x, linearVelocity.y, linearVelocity.z],
+        angularVelocity: [angularVelocity.x, angularVelocity.y, angularVelocity.z],
+        gravityScale: body.gravityScale(),
+        frozenUntilTick: frozen.get(object.id)?.expiresAtTick ?? null,
+      }
+    }),
+    collisionNoteLaw,
+    pendingEvents: pendingEvents.slice(),
+    noteCooldowns: [...lastNoteTicks.entries()],
+    noteSequence,
+    selectedId,
+  })
+
+  const restore = (value: unknown) => {
+    const experiment = validateExperiment(scene, value)
+    const restoredBodies = experiment.bodies.map(state => {
+      const body = bodies.get(state.id)
+      if (!body) throw new Error('experiment refers to a missing physics body')
+      return { state, body }
+    })
+    for (const { state, body } of restoredBodies) {
+      body.setTranslation({ x: state.position[0], y: state.position[1], z: state.position[2] }, true)
+      body.setRotation({ x: state.rotation[0], y: state.rotation[1], z: state.rotation[2], w: state.rotation[3] }, true)
+      body.setLinvel({ x: state.linearVelocity[0], y: state.linearVelocity[1], z: state.linearVelocity[2] }, true)
+      body.setAngvel({ x: state.angularVelocity[0], y: state.angularVelocity[1], z: state.angularVelocity[2] }, true)
+      body.setGravityScale(state.gravityScale, true)
+      const isFrozen = state.frozenUntilTick !== null && state.frozenUntilTick > experiment.tick
+      body.setEnabledTranslations(!isFrozen, !isFrozen, !isFrozen, true)
+      body.setEnabledRotations(!isFrozen, !isFrozen, !isFrozen, true)
+    }
+    tick = experiment.tick
+    collisionNoteLaw = experiment.collisionNoteLaw
+    frozen.clear()
+    for (const state of experiment.bodies) {
+      if (state.frozenUntilTick !== null && state.frozenUntilTick > tick) frozen.set(state.id, { expiresAtTick: state.frozenUntilTick })
+    }
+    lastNoteTicks.clear()
+    for (const [key, lastTick] of experiment.noteCooldowns) lastNoteTicks.set(key, lastTick)
+    noteSequence = experiment.noteSequence
+    pendingEvents.splice(0, pendingEvents.length, ...experiment.pendingEvents)
+    eventQueue.clear()
+    world.propagateModifiedBodyPositionsToColliders()
+    return experiment
+  }
+
   return {
     scene,
     bodies,
@@ -110,6 +167,8 @@ export async function createSimulation(value: unknown) {
     get tick() { return tick },
     get activeCollisionNoteLaw() { return collisionNoteLaw },
     get frozenTargets() { return new Map(frozen) },
+    snapshot,
+    restore,
     clearCollisionNoteLaw: () => { collisionNoteLaw = null },
     step: () => {
       world.step(eventQueue)
