@@ -1,0 +1,9 @@
+{
+  "schema": "rulebreaker/scene/v1",
+  "objects": [
+    {"id": "blue-a", "color": "blue", "position": [-2, 4, 0]},
+    {"id": "blue-b", "color": "blue", "position": [-0.5, 6, -1]},
+    {"id": "red-a", "color": "red", "position": [1, 5, 0]},
+    {"id": "gold-a", "color": "gold", "position": [2.5, 7, -1]}
+  ]
+}
