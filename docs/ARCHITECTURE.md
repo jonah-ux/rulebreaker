@@ -22,6 +22,8 @@ The stage control surface exposes that same clock for inspection. `Pause room` c
 
 `runtimeMetrics.ts` summarizes a bounded browser sample window. The renderer loop measures elapsed wall time, rendered frames, Rapier tick delta, and Three.js renderer counters, then publishes one `RuntimeMetrics` value after at least 500 ms. `frameMs` and `fps` describe presentation cadence; `physicsHz` describes engine ticks per second; draw calls, triangles, geometries, textures, object count, and pixel ratio describe the observed local scene budget. The panel intentionally labels these as local measurements rather than a device-independent benchmark.
 
+`replay.ts` keeps the replay layer on the existing `rulebreaker/experiment/v1` snapshot contract. The first checkpoint is tick 0; later checkpoints are captured every 30 simulation ticks and bounded to 48 entries. Restoring a checkpoint calls the same validated `simulation.restore` path used by import and branch restore, then pauses the room. Scrubbing to history removes later checkpoints and event markers so continuing from a historical state creates a new recorded future instead of displaying stale predictions. Replay does not make provider requests.
+
 The sample scene keeps its dynamic bodies awake so gravity changes can affect objects after they settle against a boundary. Sleeping-body optimization and cross-browser determinism remain outside this slice.
 
 ## Experiment format and history

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import sample from './scene.json'
 import { World } from './World'
 import type { RuntimeMetrics } from './runtimeMetrics'
+import { checkpointAtIndex, upsertReplayCheckpoint } from './replay'
+import type { ReplayCheckpoint } from './replay'
 import type { Experiment, Law } from './domain'
 import { PreparedInterpreterError, interpretPreparedPrompt } from './preparedInterpreter'
 import type { SimulationEvent } from './simulation'
@@ -53,14 +55,23 @@ export default function App() {
   const [stepRequest, setStepRequest] = useState<{ nonce: number } | null>(null)
   const [simulationTick, setSimulationTick] = useState(0)
   const [runtimeMetrics, setRuntimeMetrics] = useState<RuntimeMetrics | null>(null)
+  const [replayCheckpoints, setReplayCheckpoints] = useState<ReplayCheckpoint[]>([])
+  const [replayCursor, setReplayCursor] = useState(0)
+  const [replayRequest, setReplayRequest] = useState<{ nonce: number; checkpoint: ReplayCheckpoint } | null>(null)
+  const [replayMarkers, setReplayMarkers] = useState<number[]>([])
   const audioContext = useRef<AudioContext | null>(null)
   const activeVoices = useRef(0)
   const actionNonce = useRef(0)
   const liveAbort = useRef<AbortController | null>(null)
   const demoTimers = useRef<number[]>([])
   const ledgerId = useRef(0)
+  const replayFollow = useRef(true)
 
   useEffect(() => () => { for (const timer of demoTimers.current) window.clearTimeout(timer) }, [])
+
+  useEffect(() => {
+    if (replayFollow.current) setReplayCursor(Math.max(0, replayCheckpoints.length - 1))
+  }, [replayCheckpoints.length])
 
   const enableAudio = () => {
     const AudioContextClass = window.AudioContext ?? (window as AudioWindow).webkitAudioContext
@@ -148,6 +159,12 @@ export default function App() {
     setSimulationTick(snapshot.tick)
     addLedgerEntry('restore', 'Snapshot restored', `tick ${snapshot.tick} · ${snapshot.bodies.length} bodies`)
   }, [addLedgerEntry])
+  const handleCheckpoint = useCallback((snapshot: Experiment) => {
+    setReplayCheckpoints(current => upsertReplayCheckpoint(current, snapshot))
+  }, [])
+  const handleReplayMarker = useCallback((tick: number) => {
+    setReplayMarkers(current => current.includes(tick) ? current : [...current, tick].sort((left, right) => left - right).slice(-96))
+  }, [])
   const requestFreeze = () => {
     if (!selectedId) return
     setFreezeRequest({ id: selectedId, nonce: Date.now() })
@@ -165,6 +182,10 @@ export default function App() {
   }
   const togglePaused = () => {
     const next = !paused
+    if (paused && !next) {
+      replayFollow.current = true
+      setReplayCursor(Math.max(0, replayCheckpoints.length - 1))
+    }
     setPaused(next)
     addLedgerEntry('restore', next ? 'Simulation paused' : 'Simulation resumed', `clock tick ${simulationTick}`)
   }
@@ -172,6 +193,19 @@ export default function App() {
     if (!paused) return
     setStepRequest({ nonce: nextNonce() })
     addLedgerEntry('restore', 'Simulation advanced one tick', `from tick ${simulationTick}`)
+  }
+  const scrubReplay = (index: number) => {
+    const checkpoint = checkpointAtIndex(replayCheckpoints, index)
+    if (!checkpoint) return
+    const latestIndex = replayCheckpoints.length - 1
+    const isLatest = index === latestIndex
+    replayFollow.current = isLatest
+    if (!isLatest) setReplayCheckpoints(current => current.filter(item => item.tick <= checkpoint.tick))
+    if (!isLatest) setReplayMarkers(current => current.filter(tick => tick <= checkpoint.tick))
+    setReplayCursor(index)
+    setPaused(true)
+    setReplayRequest({ nonce: nextNonce(), checkpoint })
+    addLedgerEntry('restore', isLatest ? 'Replay checkpoint selected' : 'Replay branched from checkpoint', `restoring simulation tick ${checkpoint.tick}`)
   }
   const resetRoom = () => {
     for (const timer of demoTimers.current) window.clearTimeout(timer)
@@ -197,6 +231,11 @@ export default function App() {
     setStepRequest(null)
     setSimulationTick(0)
     setRuntimeMetrics(null)
+    setReplayCheckpoints([])
+    setReplayCursor(0)
+    setReplayRequest(null)
+    setReplayMarkers([])
+    replayFollow.current = true
     setExperimentStatus('Room reset. Import an experiment snapshot here to restore it.')
     setLedger([])
     setReset(value => value + 1)
@@ -286,6 +325,7 @@ export default function App() {
 
   const selectedName = selectedId ? displayName(selectedId) : 'Nothing selected'
   const frozenNames = Object.keys(frozen).map(displayName)
+  const selectedCheckpoint = checkpointAtIndex(replayCheckpoints, replayCursor)
 
   return <main>
     <header className="hero">
@@ -339,6 +379,9 @@ export default function App() {
         stepRequest={stepRequest}
         onTick={setSimulationTick}
         onMetrics={setRuntimeMetrics}
+        replayRequest={replayRequest}
+        onCheckpoint={handleCheckpoint}
+        onReplayMarker={handleReplayMarker}
       />
       <div className="stage-caption"><span>DRAG TO ORBIT</span><span>SCROLL TO ZOOM</span><span>CLICK TO SELECT</span></div>
       <div className="stage-controls" aria-label="Simulation controls"><button className="stage-control-button" onClick={togglePaused}>{paused ? 'Resume room' : 'Pause room'}</button><button className="stage-control-button" disabled={!paused} onClick={stepSimulation}>Step 1 tick</button><span className={paused ? 'clock-state paused' : 'clock-state'}>{paused ? 'PAUSED' : 'LIVE'} · TICK {simulationTick}</span></div>
@@ -395,8 +438,24 @@ export default function App() {
       <div className="import-row"><button className="freeze-button" disabled={!experimentText.trim()} onClick={requestImport}>Import into room</button><span>{experimentStatus}</span></div>
     </section>
 
+    <section className="panel replay-panel" aria-label="Replay timeline">
+      <div className="panel-heading"><div><span className="panel-kicker">04 / REPLAY</span><h2>Scrub the room’s memory</h2></div><span className="law-count">{replayCheckpoints.length} checkpoints</span></div>
+      <p className="panel-copy">The room records a checkpoint every 30 Rapier ticks. Scrubbing restores the complete physics snapshot, pauses the room, and branches future checkpoints when you continue from the past.</p>
+      <div className="replay-actions">
+        <button className="secondary-button" disabled={replayCheckpoints.length < 2 || replayCursor === 0} onClick={() => scrubReplay(replayCursor - 1)}>Previous</button>
+        <button className="secondary-button" disabled={replayCheckpoints.length < 2 || replayCursor >= replayCheckpoints.length - 1} onClick={() => scrubReplay(replayCursor + 1)}>Next</button>
+        <button className="secondary-button" disabled={replayCheckpoints.length < 2 || replayCursor === replayCheckpoints.length - 1} onClick={() => scrubReplay(replayCheckpoints.length - 1)}>Latest</button>
+      </div>
+      <input className="replay-slider" aria-label="Replay timeline" type="range" min="0" max={Math.max(replayCheckpoints.length - 1, 0)} step="1" value={replayCursor} disabled={replayCheckpoints.length < 2} onChange={event => scrubReplay(Number(event.target.value))} aria-valuetext={selectedCheckpoint ? `simulation tick ${selectedCheckpoint.tick}` : 'recording checkpoints'} />
+      <div className="replay-track" aria-hidden="true">
+        <span className="replay-track-fill" style={{ width: replayCheckpoints.length > 1 ? `${(replayCursor / (replayCheckpoints.length - 1)) * 100}%` : '0%' }} />
+        {replayMarkers.map(tick => <span key={tick} className="replay-marker" style={{ left: replayCheckpoints.length > 1 ? `${Math.max(0, Math.min(100, ((tick - replayCheckpoints[0]!.tick) / Math.max(replayCheckpoints[replayCheckpoints.length - 1]!.tick - replayCheckpoints[0]!.tick, 1)) * 100))}%` : '0%' }} />)}
+      </div>
+      <div className="replay-readout" aria-live="polite">{selectedCheckpoint ? <><strong>Checkpoint tick {selectedCheckpoint.tick}</strong><span>{replayCursor === replayCheckpoints.length - 1 ? 'latest recorded state' : 'paused historical state · continue to branch from here'}</span></> : <span>Collecting the first checkpoint…</span>}</div>
+    </section>
+
     <section className="panel ledger-panel" aria-label="Recent room events">
-      <div className="panel-heading"><div><span className="panel-kicker">04 / EVENT LEDGER</span><h2>Watch the consequences accumulate</h2></div><span className="law-count">{ledger.length} recent</span></div>
+      <div className="panel-heading"><div><span className="panel-kicker">05 / EVENT LEDGER</span><h2>Watch the consequences accumulate</h2></div><span className="law-count">{ledger.length} recent</span></div>
       <p className="panel-copy">The ledger records engine events and timeline actions so an experiment stays inspectable after the motion settles.</p>
       {ledger.length === 0 ? <div className="ledger-empty">No events yet. Apply a law or run the guided room.</div> : <ol className="ledger-list">{ledger.slice(0, 8).map(entry => <li key={entry.id} className={`ledger-entry ${entry.tone}`}><span className="ledger-mark" /><div><strong>{entry.title}</strong><span>{entry.detail}</span></div></li>)}</ol>}
     </section>
@@ -408,7 +467,7 @@ export default function App() {
     </section>
 
     <section className="panel runtime-panel" aria-label="Runtime telemetry">
-      <div className="panel-heading"><div><span className="panel-kicker">05 / RUNTIME</span><h2>Measure the room</h2></div><span className="law-count">{runtimeMetrics ? 'live sample' : 'warming up'}</span></div>
+      <div className="panel-heading"><div><span className="panel-kicker">06 / RUNTIME</span><h2>Measure the room</h2></div><span className="law-count">{runtimeMetrics ? 'live sample' : 'warming up'}</span></div>
       <p className="panel-copy">Measured from the browser’s render loop over the latest half-second window. Physics cadence is Rapier ticks per second; resource counts are renderer-reported scene totals.</p>
       <div className="runtime-grid">
         <div><span className="telemetry-label">FRAME TIME</span><strong>{runtimeMetrics ? <>{runtimeMetrics.frameMs.toFixed(1)} <small>ms</small></> : '—'}</strong><span>{runtimeMetrics ? `${runtimeMetrics.fps.toFixed(1)} measured FPS` : 'Collecting a sample…'}</span></div>
