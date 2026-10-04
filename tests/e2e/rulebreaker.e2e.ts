@@ -42,7 +42,7 @@ test.describe('Rulebreaker browser release surface', () => {
     const prompt = page.getByRole('textbox', { name: 'Law prompt' })
     await prompt.fill('make the blue shapes rise')
     await page.getByRole('button', { name: 'Try prepared' }).click()
-    await expect(page.getByText('Prepared interpretation ready.', { exact: false })).toBeVisible()
+    await expect(page.locator('.live-status')).toContainText('Prepared interpretation ready.')
     await page.getByRole('button', { name: 'Apply proposal' }).click()
     await expect(page.locator('.live-status')).toHaveText('Law applied to the physics engine.')
     await expect(page.getByText('Ceiling expedition complete', { exact: true })).toBeVisible({ timeout: 15_000 })
@@ -69,9 +69,9 @@ test.describe('Rulebreaker browser release surface', () => {
     await expect(page.locator('.clock-state')).toContainText('PAUSED')
 
     await page.getByRole('button', { name: 'Reset', exact: true }).click()
-    await expect(page.getByText('Room reset. Import an experiment snapshot here to restore it.', { exact: false })).toBeVisible()
+    await expect(diagnostics.locator('.import-row')).toContainText('Room reset. Import an experiment snapshot here to restore it.')
     await diagnostics.getByRole('button', { name: 'Import into room' }).click()
-    await expect(page.getByText('Experiment imported into the live room.', { exact: false })).toBeVisible()
+    await expect(diagnostics.locator('.import-row')).toContainText('Experiment imported into the live room.')
     await expect(page.locator('.clock-state')).toContainText('PAUSED')
 
     await page.getByRole('button', { name: 'Resume room' }).click()
