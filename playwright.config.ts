@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
-const deploymentUrl = process.env.RULEBREAKER_E2E_BASE_URL
+const deploymentUrl = process.env.RULEBREAKER_E2E_BASE_URL?.trim() || undefined
 
 export default defineConfig({
   testDir: './tests/e2e',

@@ -3,6 +3,12 @@ on:
   push:
     branches: [main, 'codex-*', 'codex/**']
   pull_request:
+  workflow_dispatch:
+    inputs:
+      deployment_url:
+        description: 'Optional served URL for release acceptance'
+        required: false
+        type: string
 permissions:
   contents: read
 jobs:
@@ -20,6 +26,9 @@ jobs:
       - name: Install pinned Chromium
         run: npx playwright install --with-deps chromium
       - name: Run desktop and mobile browser checks
+        env:
+          RULEBREAKER_E2E_BASE_URL: ${{ inputs.deployment_url }}
+          RULEBREAKER_E2E_EXPECTED_REVISION: ${{ inputs.deployment_url && github.sha || '' }}
         run: npm run test:e2e
       - name: Upload Playwright report
         if: always()

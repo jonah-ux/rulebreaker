@@ -61,6 +61,8 @@ Run the same acceptance suite against a served URL without starting a local serv
 RULEBREAKER_E2E_BASE_URL=https://<verified-deployment> npm run test:e2e
 ```
 
+The same existing GitHub workflow accepts a `deployment_url` manual input. Dispatch it from the exact landed ref to offload hosted desktop/mobile acceptance; it also checks the served health revision against that workflow's source commit. Keep production live AI disabled for this suite.
+
 Record the deployment ID and its exact commit before promotion. `vercel promote <verified-deployment-url> --scope <team>` promotes an existing artifact. For a subsequent release regression, `vercel rollback <previous-good-deployment-url> --scope <team>` selects the recorded previous artifact; read the production health revision again and rerun browser acceptance. On the first release there is no earlier known-good production artifact: use the reviewed release tag to redeploy, or remove traffic through the hosting owner's route. Do not invent a prior rollback target.
 
 CI actions are pinned to owner commit SHAs. Update those pins and the dependency lockfile in a reviewed PR, and rerun the same release gates.
