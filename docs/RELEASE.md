@@ -39,6 +39,8 @@ RULEBREAKER_AI_MODEL=gpt-4o-mini
 
 The operator token is supplied per request as `Authorization: Bearer <token>`. A missing or false enable flag returns a disabled response before the request body is read. A missing or incorrect token returns an authorization response before provider work begins. Keep the enable flag false or unset for prepared-only hosting. No credential is stored in source, the browser bundle, or this repository.
 
+Provider URL and model come only from trusted server configuration, never a client prompt or model proposal. URLs require HTTPS and cannot contain userinfo, queries, or fragments. A loopback HTTP provider can be enabled with `RULEBREAKER_AI_ALLOW_LOCAL_HTTP=true` only outside production/Vercel. The optional browser panel accepts an operator-held access token in volatile page memory, clears it on Reset, and never accepts a provider key.
+
 The adapter enforces a 32 KiB request-body limit, an 8-second body-read deadline, a streamed 32 KiB provider-response limit, a 256-token provider output cap, and an 8-second provider timeout. Disconnect interrupts body reading as well as provider work. Oversized requests return a sanitized 413; stalled body reads return 408 and close the connection. It validates the complete response against the scene and law schema before returning it. Prepared interpretation never calls this route.
 
 ## Hosting headers

@@ -68,7 +68,10 @@ export function liveAiAvailability(environment: Environment): LiveAiAvailability
   const baseUrl = environment.RULEBREAKER_AI_BASE_URL ?? 'https://api.openai.com/v1'
   try {
     const parsed = new URL(baseUrl)
-    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('provider URL must use http or https')
+    const localHttp = parsed.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)
+      && environment.RULEBREAKER_AI_ALLOW_LOCAL_HTTP === 'true' && environment.NODE_ENV !== 'production' && environment.VERCEL !== '1'
+    if (parsed.protocol !== 'https:' && !localHttp) throw new Error('provider URL requires HTTPS')
+    if (parsed.username || parsed.password || parsed.search || parsed.hash) throw new Error('provider URL must not contain credentials, query, or fragment')
   } catch {
     return { enabled: false, reason: 'invalid-base-url' }
   }

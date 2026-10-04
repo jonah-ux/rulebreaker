@@ -22,7 +22,11 @@ async function readCheckpointCount(page: Page) {
 test.describe('Rulebreaker browser release surface', () => {
   test('uses the real Chromium engine for prepare/apply, export/import, controls, replay, and diagnostics', async ({ page }) => {
     const pageErrors: string[] = []
+    const consoleErrors: string[] = []
+    const failedRequests: string[] = []
     page.on('pageerror', error => pageErrors.push(error.message))
+    page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()) })
+    page.on('requestfailed', request => failedRequests.push(request.url()))
 
     await page.goto('/')
     await expect(page.getByRole('heading', { name: 'The rules are yours to break.' })).toBeVisible()
@@ -83,6 +87,8 @@ test.describe('Rulebreaker browser release surface', () => {
     expect(await readCheckpointCount(page)).toBe(countBeforeBrowse)
 
     expect(pageErrors).toEqual([])
+    expect(consoleErrors).toEqual([])
+    expect(failedRequests).toEqual([])
   })
 
   test('restores custom scope, expires a freeze without overwriting it, and protects operator access', async ({ page, request }) => {
@@ -113,7 +119,11 @@ test.describe('Rulebreaker browser release surface', () => {
     await page.getByRole('button', { name: 'Reset', exact: true }).click()
     await expect(page.getByRole('textbox', { name: 'Operator access token' })).toHaveValue('')
     const capabilities = await request.get('/api/capabilities')
+    expect(capabilities.status()).toBe(200)
     expect(await capabilities.json()).toMatchObject({ capabilities: { prepared: true, liveAi: false } })
+    const health = await request.get('/api/health')
+    expect(health.status()).toBe(200)
+    expect(await health.json()).toMatchObject({ status: 'ok', version: '0.1.0', capabilities: { prepared: true, liveAi: false } })
     const anonymous = await request.post('/api/interpret', { data: { prompt: 'blue shapes rise' } })
     expect(anonymous.status()).toBe(503)
     expect(await anonymous.json()).toMatchObject({ code: 'live_ai_disabled' })
@@ -130,16 +140,15 @@ test.describe('Rulebreaker browser release surface', () => {
         createGain() {
           const gain = super.createGain()
           const connect = gain.connect.bind(gain)
-          const context = this
           gain.connect = ((destination: AudioNode, output?: number, input?: number) => {
-            if (destination !== context.destination) return connect(destination, output, input)
-            const analyser = context.createAnalyser()
+            if (destination !== this.destination) return connect(destination, output, input)
+            const analyser = this.createAnalyser()
             analyser.fftSize = 256
             connect(analyser)
             analyser.connect(destination)
             const samples = new Float32Array(analyser.fftSize)
             const timer = setInterval(() => {
-              if (context.state === 'closed') { clearInterval(timer); return }
+              if (this.state === 'closed') { clearInterval(timer); return }
               analyser.getFloatTimeDomainData(samples)
               probe.__rulebreakerAudioPeak = Math.max(probe.__rulebreakerAudioPeak ?? 0, ...samples.map(Math.abs))
             }, 20)
@@ -156,7 +165,7 @@ test.describe('Rulebreaker browser release surface', () => {
     await expect(page.getByRole('button', { name: 'Mute audio', exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Listen', exact: true }).click()
     await page.getByRole('button', { name: 'Resume room' }).click()
-    await expect.poll(() => page.evaluate(() => (window as Window & { __rulebreakerAudioPeak: number }).__rulebreakerAudioPeak), { timeout: 15_000 }).toBeGreaterThan(0.001)
+    await expect.poll(() => page.evaluate(() => (window as Window & { __rulebreakerAudioPeak?: number }).__rulebreakerAudioPeak ?? 0), { timeout: 15_000 }).toBeGreaterThan(0.001)
     await page.getByRole('button', { name: 'Mute audio', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Enable audio', exact: true })).toBeVisible()
   })

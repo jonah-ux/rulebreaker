@@ -64,6 +64,15 @@ describe('live law adapter boundary', () => {
     await expect(interpretLaw({ prompt: 'make blue objects rise', scene: sample }, { environment: { ...environment, RULEBREAKER_LIVE_AI_ENABLED: 'false' }, operatorToken: environment.RULEBREAKER_OPERATOR_BEARER_TOKEN })).rejects.toThrow('disabled')
     await expect(interpretLaw({ prompt: 'make blue objects rise', scene: sample }, { environment, operatorToken: 'wrong-token' })).rejects.toThrow('authorization')
   })
+  it('requires a clean HTTPS provider URL, with an explicit development-only loopback exception', () => {
+    for (const url of ['http://provider.test/v1', 'https://user:secret@provider.test/v1', 'https://provider.test/v1?key=secret', 'https://provider.test/v1#fragment']) {
+      expect(liveAiAvailability({ ...environment, RULEBREAKER_AI_BASE_URL: url }).enabled).toBe(false)
+    }
+    const local = { ...environment, RULEBREAKER_AI_BASE_URL: 'http://127.0.0.1:11434/v1', RULEBREAKER_AI_ALLOW_LOCAL_HTTP: 'true' }
+    expect(liveAiAvailability(local).enabled).toBe(true)
+    expect(liveAiAvailability({ ...local, VERCEL: '1' }).enabled).toBe(false)
+    expect(liveAiAvailability({ ...local, NODE_ENV: 'production' }).enabled).toBe(false)
+  })
   it('honors pre-abort before making a provider request', async () => {
     const controller = new AbortController()
     controller.abort()
