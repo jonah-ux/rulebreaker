@@ -44,7 +44,7 @@ test.describe('Rulebreaker browser release surface', () => {
     await page.getByRole('button', { name: 'Try prepared' }).click()
     await expect(page.getByText('Prepared interpretation ready.', { exact: false })).toBeVisible()
     await page.getByRole('button', { name: 'Apply proposal' }).click()
-    await expect(page.getByText('Law applied to the physics engine.', { exact: false })).toBeVisible()
+    await expect(page.locator('.live-status')).toHaveText('Law applied to the physics engine.')
     await expect(page.getByText('Ceiling expedition complete', { exact: true })).toBeVisible({ timeout: 15_000 })
     await page.getByRole('button', { name: 'Pause room' }).click()
     await page.locator('#room').scrollIntoViewIfNeeded()
