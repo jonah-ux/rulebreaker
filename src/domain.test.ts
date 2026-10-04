@@ -167,6 +167,8 @@ describe('typed law boundary', () => {
       }
       expect(() => simulation.restore({ ...snapshot, noteCooldowns: [['ghost|room', 0]] })).toThrow()
       expect(() => simulation.restore({ ...snapshot, noteCooldowns: [['blue-a|room', snapshot.tick + 1]] })).toThrow()
+      expect(() => simulation.restore({ ...snapshot, tick: Number.MAX_SAFE_INTEGER })).toThrow()
+      expect(() => simulation.restore({ ...snapshot, bodies: snapshot.bodies.map((body, index) => index === 0 ? { ...body, frozenUntilTick: snapshot.tick + 601 } : body) })).toThrow()
       for (const type of ['freeze-applied', 'freeze-expired']) {
         const event = type === 'freeze-applied' ? { type, target: 'ghost-id', expiresAtTick: 10 } : { type, target: 'ghost-id' }
         expect(() => simulation.restore({ ...snapshot, pendingEvents: [event] })).toThrow()

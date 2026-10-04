@@ -31,6 +31,8 @@ const validatedScene = SceneSchema.parse(sample)
 
 export default function App() {
   const [upward, setUpward] = useState(false)
+  const [gravityScales, setGravityScales] = useState<Record<string, number>>(() => Object.fromEntries(sample.objects.map(object => [object.id, 1])))
+  const [collisionPolicy, setCollisionPolicy] = useState<Experiment['collisionNoteLaw']>(null)
   const [collisionNotes, setCollisionNotes] = useState(false)
   const [freezeOnClick, setFreezeOnClick] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -188,7 +190,13 @@ export default function App() {
     setLiveStatus(result.message)
     if (result.ok) addLedgerEntry('law', 'Law applied to the engine', result.message)
   }, [addLedgerEntry])
+  const readLawState = useCallback((snapshot: Experiment) => {
+    const scales = Object.fromEntries(snapshot.bodies.map(body => [body.id, body.gravityScale]))
+    setGravityScales(current => snapshot.bodies.every(body => current[body.id] === body.gravityScale) ? current : scales)
+    setCollisionPolicy(current => JSON.stringify(current) === JSON.stringify(snapshot.collisionNoteLaw) ? current : snapshot.collisionNoteLaw)
+  }, [])
   const readSnapshot = useCallback((snapshot: Experiment) => {
+    readLawState(snapshot)
     const blueBodies = snapshot.bodies.filter(body => body.id.startsWith('blue-'))
     setUpward(blueBodies.length > 0 && blueBodies.every(body => body.gravityScale === -1))
     setCollisionNotes(snapshot.collisionNoteLaw !== null)
@@ -200,7 +208,7 @@ export default function App() {
     setFrozen(activeFrozen)
     setLastNote(null)
     setSimulationTick(snapshot.tick)
-  }, [])
+  }, [readLawState])
   const handleRestored = useCallback((snapshot: Experiment) => {
     readSnapshot(snapshot)
     setReplayCheckpoints([{ tick: snapshot.tick, snapshot }])
@@ -212,10 +220,11 @@ export default function App() {
     addLedgerEntry('restore', 'Snapshot restored', `tick ${snapshot.tick} · ${snapshot.bodies.length} bodies`)
   }, [addLedgerEntry, readSnapshot, stopAudio])
   const handleCheckpoint = useCallback((snapshot: Experiment) => {
+    readLawState(snapshot)
     const branching = !replayFollow.current
     replayFollow.current = true
     setReplayCheckpoints(current => upsertReplayCheckpoint(branching ? branchReplay(current, snapshot.tick) : current, snapshot))
-  }, [])
+  }, [readLawState])
   const handleReplayMarker = useCallback((tick: number) => {
     setReplayMarkers(current => current.includes(tick) ? current : [...current, tick].sort((left, right) => left - right).slice(-96))
   }, [])
@@ -271,6 +280,7 @@ export default function App() {
     addLedgerEntry('restore', 'Replay checkpoint selected', `restoring simulation tick ${checkpoint.tick}`)
   }
   const resetRoom = () => {
+    downloadNextExport.current = false
     liveAbort.current?.abort()
     liveAbort.current = null
     setLiveBusy(false)
@@ -282,6 +292,8 @@ export default function App() {
     setDemoRunning(false)
     setDemoStep(0)
     setUpward(false)
+    setGravityScales(Object.fromEntries(sample.objects.map(object => [object.id, 1])))
+    setCollisionPolicy(null)
     setCollisionNotes(false)
     setFreezeOnClick(false)
     setSelectedId(null)
@@ -404,6 +416,8 @@ export default function App() {
   const selectedName = selectedId ? displayName(selectedId) : 'Nothing selected'
   const frozenNames = Object.keys(frozen).map(displayName)
   const selectedCheckpoint = checkpointAtIndex(replayCheckpoints, replayCursor)
+  const gravityActive = Object.values(gravityScales).some(scale => scale !== 1)
+  const blueCustomGravity = sample.objects.some(object => object.color === 'blue' && gravityScales[object.id] !== 1) && !upward
 
   return <main>
     <a className="skip-link" href="#room">Skip to room</a>
@@ -461,18 +475,18 @@ export default function App() {
 
     <section className="lab-grid">
       <div className="panel laws-panel">
-        <div className="panel-heading"><div><span className="panel-kicker">01 / LAWS</span><h2>Rewrite the room</h2></div><div className="heading-actions"><span className="law-count">{[upward, collisionNotes, Object.keys(frozen).length > 0].filter(Boolean).length} active</span><button className="reset-button" onClick={resetRoom}>Reset</button></div></div>
+        <div className="panel-heading"><div><span className="panel-kicker">01 / LAWS</span><h2>Rewrite the room</h2></div><div className="heading-actions"><span className="law-count">{[gravityActive, collisionNotes, Object.keys(frozen).length > 0].filter(Boolean).length} active</span><button className="reset-button" onClick={resetRoom}>Reset</button></div></div>
         <p className="panel-copy">Pick a law. Watch what changes.</p>
 
         <article className={`law-card ${upward ? 'is-active' : ''}`}>
           <div className="law-index gravity-index">A</div>
-          <div className="law-body"><h3>Blue objects fall upward</h3><p>Send the blue shapes to the ceiling. Red and gold keep falling.</p><div className="law-meta"><span>{upward ? 'ACTIVE' : 'READY'}</span><span>scope: blue</span></div></div>
+          <div className="law-body"><h3>Blue objects fall upward</h3><p>{blueCustomGravity ? 'Custom gravity is active. Apply this preset to give both blue shapes scale −1.' : 'Send the blue shapes to the ceiling. Inspect each body’s current gravity below.'}</p><div className="law-meta"><span>{upward ? 'ACTIVE' : blueCustomGravity ? 'CUSTOM' : 'READY'}</span><span>preset scope: blue</span></div></div>
           <button className="small-button" disabled={!worldReady} onClick={toggleGravity}>{upward ? 'Restore' : 'Apply'}</button>
         </article>
 
         <article className={`law-card ${collisionNotes ? 'is-active' : ''}`}>
           <div className="law-index note-index">B</div>
-          <div className="law-body"><h3>Every collision plays a note</h3><p>Give every meaningful impact a voice. Enable audio below to listen.</p><div className="law-meta"><span>{collisionNotes ? 'ACTIVE' : 'READY'}</span><span>scope: all objects</span></div></div>
+          <div className="law-body"><h3>Every collision plays a note</h3><p>Give every meaningful impact a voice. Enable audio below to listen.</p><div className="law-meta"><span>{collisionNotes ? 'ACTIVE' : 'READY'}</span><span>scope: {collisionPolicy ? collisionPolicy.targets.map(displayName).join(', ') : 'all objects on apply'}</span></div>{collisionPolicy && <small>{collisionPolicy.threshold} m/s · {collisionPolicy.cooldownTicks} tick cooldown · {collisionPolicy.maxVoices} voices</small>}</div>
           <button className="small-button" disabled={!worldReady} onClick={toggleCollisionNotes}>{collisionNotes ? 'Silence' : 'Listen'}</button>
         </article>
 
@@ -489,7 +503,7 @@ export default function App() {
         <div className="panel-heading"><div><span className="panel-kicker">02 / INSPECTOR</span><h2>Inspect a body</h2></div><span className="selection-pip" aria-hidden="true" /></div>
         <p className="panel-copy">Click a shape in the room or choose one below.</p>
         <div className="object-list" aria-label="Room objects">
-          {sample.objects.map(object => <button key={object.id} className={`object-button ${selectedId === object.id ? 'is-selected' : ''}`} onClick={() => selectObject(object.id)} aria-pressed={selectedId === object.id}><span className={`object-swatch ${object.color}`} /><span><strong>{displayName(object.id)}</strong><small>{object.color} · {frozen[object.id] ? 'frozen' : 'dynamic'}</small></span><span className="chevron">{selectedId === object.id ? '●' : '○'}</span></button>)}
+          {sample.objects.map(object => <button key={object.id} className={`object-button ${selectedId === object.id ? 'is-selected' : ''}`} onClick={() => selectObject(object.id)} aria-pressed={selectedId === object.id}><span className={`object-swatch ${object.color}`} /><span><strong>{displayName(object.id)}</strong><small>{object.color} · {frozen[object.id] ? 'frozen' : 'dynamic'} · gravity {gravityScales[object.id]}</small></span><span className="chevron">{selectedId === object.id ? '●' : '○'}</span></button>)}
         </div>
         <div className="selection-readout"><span>Selected</span><strong>{selectedName}</strong></div>
         <button className="freeze-button" disabled={!worldReady || !selectedId} onClick={requestFreeze}>Freeze {selectedId ? displayName(selectedId) : 'selected body'} for 3 seconds</button>
@@ -532,7 +546,7 @@ export default function App() {
     </section>
 
     <section className="telemetry-row" aria-label="Live room telemetry">
-      <div><span className="telemetry-label">BLUE HEIGHT</span><strong>{height.toFixed(2)} <small>m</small></strong><span>{upward ? 'rising under inverted gravity' : 'moving under ordinary gravity'}</span></div>
+      <div><span className="telemetry-label">BLUE A HEIGHT</span><strong>{height.toFixed(2)} <small>m</small></strong><span>gravity scale {gravityScales['blue-a']} · {frozen['blue-a'] ? 'frozen' : 'dynamic'}</span></div>
       <div><span className="telemetry-label">LAST IMPACT</span><strong>{lastNote ? `${lastNote.impact.toFixed(1)} m/s` : 'waiting'}</strong><span>{lastNote ? `${displayName(lastNote.first)} → ${lastNote.second === 'room' ? 'room boundary' : displayName(lastNote.second)}` : 'turn on collision notes to listen'}</span></div>
       <div><span className="telemetry-label">UNDO / BRANCH</span><strong>{canUndo ? 'Ready' : 'Waiting'}</strong><span>{hasBranch ? 'One branch is saved locally.' : 'Save a branch before trying a new path.'}</span></div>
     </section>
@@ -543,14 +557,14 @@ export default function App() {
       <p className="panel-copy">Snapshots use <code>rulebreaker/experiment/v1</code>. They restore physics state, active laws, freeze timers, collision cooldowns, and the selected body without another model request.</p>
       <div className="experiment-actions">
         <button className="secondary-button" disabled={!worldReady || !canUndo} onClick={() => runHistoryAction('undo')}>Undo last law</button>
-        <button className="secondary-button" onClick={() => runHistoryAction('save-branch')}>Save branch</button>
-        <button className="secondary-button" disabled={!hasBranch} onClick={() => runHistoryAction('restore-branch')}>Restore branch</button>
-        <button className="secondary-button" onClick={requestExport}>Export JSON</button>
+        <button className="secondary-button" disabled={!worldReady} onClick={() => runHistoryAction('save-branch')}>Save branch</button>
+        <button className="secondary-button" disabled={!worldReady || !hasBranch} onClick={() => runHistoryAction('restore-branch')}>Restore branch</button>
+        <button className="secondary-button" disabled={!worldReady} onClick={requestExport}>Export JSON</button>
         <button className="secondary-button" disabled={!worldReady} onClick={requestDownload}>Download JSON</button>
       </div>
       <label className="experiment-file">Load a saved experiment <input aria-label="Load experiment file" type="file" accept=".json,application/json" onChange={event => { void loadExperimentFile(event.target.files?.[0]); event.target.value = '' }} /></label>
       <textarea aria-label="Experiment JSON" value={experimentText} onChange={event => setExperimentText(event.target.value)} placeholder="Export a snapshot or paste a rulebreaker/experiment/v1 document here." maxLength={65536} rows={5} />
-      <div className="import-row"><button className="freeze-button" disabled={!experimentText.trim()} onClick={requestImport}>Import into room</button><span>{experimentStatus}</span></div>
+      <div className="import-row"><button className="freeze-button" disabled={!worldReady || !experimentText.trim()} onClick={requestImport}>Import into room</button><span>{experimentStatus}</span></div>
     </section>
 
     <section className="panel ledger-panel" aria-label="Recent room events">
