@@ -138,7 +138,8 @@ export default function App() {
 
   const addLedgerEntry = useCallback((tone: LedgerTone, title: string, detail: string) => {
     ledgerId.current += 1
-    setLedger(current => [{ id: ledgerId.current, tone, title, detail }, ...current].slice(0, 16))
+    const entry: LedgerEntry = { id: ledgerId.current, tone, title, detail }
+    setLedger(current => [entry, ...current].slice(0, 16))
   }, [])
 
   const handleEvent = useCallback((event: SimulationEvent) => {
