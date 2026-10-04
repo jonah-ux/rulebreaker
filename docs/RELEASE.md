@@ -4,7 +4,7 @@ This document describes the small release boundary for the Vite site and its sam
 
 ## Source and build
 
-Use Node.js 22.12 or newer and install from the lockfile:
+Use Node.js 22.x (22.12 or newer) and install from the lockfile:
 
 ```sh
 npm ci
@@ -51,6 +51,8 @@ The adapter enforces a 32 KiB request-body limit, an 8-second body-read deadline
 
 Record the exact source commit, the local `npm run verify` result, the desktop/mobile browser result, and the served deployment commit separately. A successful build or Vercel deployment proves source/host behavior only; it does not prove provider adoption or a live AI engine effect. Keep the operator gate closed until a reviewed owner enables it and can read back the intended provider behavior.
 
+Vercel's function compiler uses the root `tsconfig.json` and does not follow the solution's project references. Its Node/strict options are explicit there; local browser and server checks also use their focused referenced configurations. Node is pinned to the tested 22.x major.
+
 ## Deploy and roll back
 
 Use the existing Git-linked Vercel project and the authorized maintainer account. Land reviewed source through the repository's merge owner, then test its preview before promoting it. Read `GET /api/health` and compare `revision` to the deployed Git commit; require `prepared: true` and `liveAi: false` for this prepared-only release. Verify the security headers and actual Wasm room in the served browser.
@@ -64,5 +66,7 @@ RULEBREAKER_E2E_BASE_URL=https://<verified-deployment> npm run test:e2e
 The same existing GitHub workflow accepts a `deployment_url` manual input. Dispatch it from the exact landed ref to offload hosted desktop/mobile acceptance; it also checks the served health revision against that workflow's source commit. Keep production live AI disabled for this suite.
 
 Record the deployment ID and its exact commit before promotion. `vercel promote <verified-deployment-url> --scope <team>` promotes an existing artifact. For a subsequent release regression, `vercel rollback <previous-good-deployment-url> --scope <team>` selects the recorded previous artifact; read the production health revision again and rerun browser acceptance. On the first release there is no earlier known-good production artifact: use the reviewed release tag to redeploy, or remove traffic through the hosting owner's route. Do not invent a prior rollback target.
+
+Git deployments use `VERCEL_GIT_COMMIT_SHA`. When deploying an exact clean checkout through the CLI, supply `--env RULEBREAKER_RELEASE_REVISION=<full-reviewed-sha>` and `--meta githubCommitSha=<full-reviewed-sha>`; CLI uploads may have no automatic Git system variable. Health accepts only a full lowercase commit SHA and otherwise reports `null`. The stamp is an operator attestation of the uploaded checkout: verify its clean state, reviewed commit, build result, and deployment ID together.
 
 CI actions are pinned to owner commit SHAs. Update those pins and the dependency lockfile in a reviewed PR, and rerun the same release gates.

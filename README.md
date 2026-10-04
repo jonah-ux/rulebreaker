@@ -29,7 +29,7 @@ Prepared play makes no model requests. Experiments remain in the current browser
 
 ## Run locally
 
-Use Node.js 22.12 or newer and npm:
+Use Node.js 22.x (22.12 or newer) and npm:
 
 ```sh
 npm ci

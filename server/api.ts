@@ -156,7 +156,7 @@ export function healthPayload(env = environment()) {
     schema: 'rulebreaker/health/v1',
     status: 'ok',
     version: RELEASE_VERSION,
-    revision: env.VERCEL_GIT_COMMIT_SHA ?? null,
+    revision: [env.VERCEL_GIT_COMMIT_SHA, env.RULEBREAKER_RELEASE_REVISION].find(value => /^[a-f0-9]{40}$/.test(value ?? '')) ?? null,
   }
 }
 

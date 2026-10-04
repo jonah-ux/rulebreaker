@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it } from 'vitest'
-import { capabilitiesPayload, handleCapabilities, handleHealth, handleInterpret } from './api.js'
+import { capabilitiesPayload, handleCapabilities, handleHealth, handleInterpret, healthPayload } from './api.js'
 import { MAX_REQUEST_BYTES, readJsonBody } from './ai.js'
 
 class FakeRequest extends EventEmitter {
@@ -51,6 +51,12 @@ describe('same-origin API boundary', () => {
     const payload = capabilitiesPayload({})
     expect(payload.capabilities).toEqual({ prepared: true, liveAi: false })
     expect(payload.limits.requestBytes).toBe(MAX_REQUEST_BYTES)
+  })
+  it('reports unknown revisions as null and accepts an explicit CLI release stamp', () => {
+    expect(healthPayload({ VERCEL_GIT_COMMIT_SHA: '' }).revision).toBe(null)
+    expect(healthPayload({ RULEBREAKER_RELEASE_REVISION: 'not-a-commit' }).revision).toBe(null)
+    expect(healthPayload({ VERCEL_GIT_COMMIT_SHA: '', RULEBREAKER_RELEASE_REVISION: 'a'.repeat(40) }).revision).toBe('a'.repeat(40))
+    expect(healthPayload({ VERCEL_GIT_COMMIT_SHA: 'b'.repeat(40), RULEBREAKER_RELEASE_REVISION: 'a'.repeat(40) }).revision).toBe('b'.repeat(40))
   })
 
   it('serves health and capability routes as read-only JSON', () => {

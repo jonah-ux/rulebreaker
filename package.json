@@ -39,6 +39,6 @@
     "url": "https://github.com/jonah-ux/rulebreaker.git"
   },
   "engines": {
-    "node": ">=22.12.0"
+    "node": "22.x"
   }
 }
