@@ -20,7 +20,7 @@ async function readCheckpointCount(page: Page) {
 }
 
 test.describe('Rulebreaker browser release surface', () => {
-  test('uses the real Chromium engine for prepare/apply, export/import, controls, replay, and diagnostics', async ({ page }) => {
+  test('uses the real Chromium engine for prepare/apply, export/import, controls, replay, and diagnostics', async ({ page }, testInfo) => {
     const pageErrors: string[] = []
     const consoleErrors: string[] = []
     const failedRequests: string[] = []
@@ -47,6 +47,8 @@ test.describe('Rulebreaker browser release surface', () => {
     await expect(page.getByText('Law applied to the physics engine.', { exact: false })).toBeVisible()
     await expect(page.getByText('Ceiling expedition complete', { exact: true })).toBeVisible({ timeout: 15_000 })
     await page.getByRole('button', { name: 'Pause room' }).click()
+    await page.locator('#room').scrollIntoViewIfNeeded()
+    await testInfo.attach('ceiling-mission', { body: await page.screenshot(), contentType: 'image/png' })
 
     const experimentJson = diagnostics.getByRole('textbox', { name: 'Experiment JSON' })
     await diagnostics.getByRole('button', { name: 'Export JSON' }).click()
@@ -58,6 +60,7 @@ test.describe('Rulebreaker browser release surface', () => {
     expect(exported.bodies.find(body => body.id === 'blue-b')?.gravityScale).toBe(-1)
     expect(exported.bodies.find(body => body.id === 'red-a')?.gravityScale).toBe(1)
     expect(exported.bodies.find(body => body.id === 'gold-a')?.gravityScale).toBe(1)
+    await testInfo.attach('ceiling-experiment', { body: Buffer.from(JSON.stringify(exported, null, 2)), contentType: 'application/json' })
 
     const pausedTick = exported.tick
     await expect.poll(async () => readTick(await page.locator('.clock-state').textContent())).toBe(pausedTick)
