@@ -237,7 +237,7 @@ export function World(props: WorldProps) {
       propsRef.current.onLawApplied(applied)
       propsRef.current.onCheckpoint(applied)
       for (const event of events) propsRef.current.onEvent(event)
-      propsRef.current.onLawResult({ ok: true, message: 'Live proposal applied to the physics engine.' })
+      propsRef.current.onLawResult({ ok: true, message: 'Law applied to the physics engine.' })
       propsRef.current.onHistoryState(historyRef.current.length > 0, branchRef.current !== null)
     } catch (error) {
       propsRef.current.onLawResult({ ok: false, message: error instanceof Error ? error.message : 'The live proposal was refused.' })
