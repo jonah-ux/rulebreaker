@@ -424,6 +424,7 @@ export function World(props: WorldProps) {
         const requestedStep = current.stepRequest && current.stepRequest.nonce !== consumedStepNonce
         if (current.paused) {
           accumulator = 0
+          current.onTick(simulation.tick)
           if (requestedStep) {
             consumedStepNonce = current.stepRequest!.nonce
             advance()
