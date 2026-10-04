@@ -1,6 +1,6 @@
 # Rulebreaker architecture
 
-A single Vite/React/TypeScript application with independent npm dependencies and a lockfile. Zod validates the versioned scene, law, event, and experiment formats. Prepared mode has no credential or provider dependency; the local Vite server optionally mounts one bounded provider route.
+A single Vite/React/TypeScript application with independent npm dependencies and a lockfile. Zod validates the versioned scene, law, event, and experiment formats. Prepared mode has no credential or provider dependency. The development server and production Vercel functions share the same optional server API boundary.
 
 `src/domain.ts` owns scene/law/event/experiment validation. `src/preparedInterpreter.ts` owns deterministic no-key natural-language composition and refusal of unsupported phrases. `src/simulation.ts` owns the Rapier instance, fixed-step state, and atomic snapshot restore. `src/World.tsx` owns rendering, camera controls, raycast selection, animation, and history actions. `src/App.tsx` owns the prepared interaction panel, browser audio activation, local export/import surface, proposal approval, and the bounded event ledger. `src/scene.json` is the sample scene.
 
@@ -34,7 +34,9 @@ The sample scene keeps its dynamic bodies awake so gravity changes can affect ob
 
 ## Live AI seam
 
-`server/ai.ts` sends a bounded prompt plus the validated scene to an OpenAI-compatible `/chat/completions` endpoint using `RULEBREAKER_AI_BASE_URL`, `RULEBREAKER_AI_API_KEY`, and `RULEBREAKER_AI_MODEL`. The system prompt requires a JSON envelope containing a short interpretation and one typed law; `validateLaw` checks scope and bounds before the proposal reaches the UI. Requests time out after eight seconds and accept cancellation. A missing key or malformed/provider-failed response is shown as a live-mode error while prepared mode continues unchanged. The adapter is mounted by the local Vite middleware; no browser bundle contains the key, and no production deployment is implied.
+`server/api.ts` owns the shared request boundary mounted by the local Vite middleware and production `api/*.ts` functions. Prepared play remains available when live AI is disabled. Live requests require an explicit enable flag, provider configuration, and a matching operator bearer token before provider work begins. The optional browser panel holds an operator access token only in page memory and clears it on Reset; provider keys remain exclusively on the server.
+
+`server/ai.ts` sends a bounded prompt plus the validated scene to an OpenAI-compatible `/chat/completions` endpoint using `RULEBREAKER_AI_BASE_URL`, `RULEBREAKER_AI_API_KEY`, and `RULEBREAKER_AI_MODEL`. The system prompt requires a JSON envelope containing a short interpretation and one typed law; `validateLaw` checks scope and bounds before the proposal reaches the UI. Requests time out after eight seconds and accept cancellation. Sanitized failures leave prepared mode and the world unchanged. See RELEASE.md for the current byte/token limits, deployment checks, and provider proof boundary.
 
 ## Scope
 

@@ -57,6 +57,7 @@ export default function App() {
   const [liveProposal, setLiveProposal] = useState<LiveProposal | null>(null)
   const [liveStatus, setLiveStatus] = useState('Prepared suggestions stay local. Review, then apply.')
   const [liveBusy, setLiveBusy] = useState(false)
+  const [operatorToken, setOperatorToken] = useState('')
   const [demoStep, setDemoStep] = useState(0)
   const [demoRunning, setDemoRunning] = useState(false)
   const [ledger, setLedger] = useState<LedgerEntry[]>([])
@@ -284,6 +285,7 @@ export default function App() {
     liveAbort.current?.abort()
     liveAbort.current = null
     setLiveBusy(false)
+    setOperatorToken('')
     setWorldReady(false)
     setGoalProgress(0)
     stopAudio()
@@ -375,6 +377,11 @@ export default function App() {
       setLiveStatus('Describe a law before asking the live interpreter.')
       return
     }
+    const token = operatorToken.trim()
+    if (!/^[!-~]{1,256}$/.test(token)) {
+      setLiveStatus('Live AI requires an operator access token. Prepared interpretation remains available.')
+      return
+    }
     liveAbort.current?.abort()
     const controller = new AbortController()
     liveAbort.current = controller
@@ -383,7 +390,7 @@ export default function App() {
     try {
       const response = await fetch('/api/interpret', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
         body: JSON.stringify({ prompt: livePrompt, scene: sample }),
         signal: controller.signal,
       })
@@ -518,7 +525,7 @@ export default function App() {
       <p className="panel-copy">Try “make the blue shapes rise”, “turn impacts into little tones”, or select a shape and ask to hold it still. Review the affected shapes before applying.</p>
       <div className="live-form"><input aria-label="Law prompt" value={livePrompt} onChange={event => setLivePrompt(event.target.value)} placeholder="e.g. make the blue shapes rise" maxLength={500} /><button className="small-button" onClick={requestPreparedProposal}>Try prepared</button></div>
       <div className="live-status" role="status">{liveStatus}</div>
-      <details className="provider-tools"><summary>Optional live AI</summary><p>Requires an operator-configured server. Prepared interpretation always works without it.</p><button className="secondary-button" disabled={liveBusy} onClick={requestLiveProposal}>{liveBusy ? 'Thinking…' : 'Ask live AI'}</button>{liveBusy && <button className="secondary-button" onClick={() => { liveAbort.current?.abort(); liveAbort.current = null; setLiveBusy(false); setLiveStatus('Live request cancelled. Your room is unchanged.') }}>Cancel request</button>}</details>
+      <details className="provider-tools"><summary>Optional live AI</summary><p>Requires an enabled server and an operator access token. This access token stays in this page’s memory and is cleared by Reset. Provider keys stay on the server. Prepared interpretation always works without either.</p><label>Operator access token <input aria-label="Operator access token" type="password" value={operatorToken} maxLength={256} autoComplete="off" onChange={event => setOperatorToken(event.target.value)} /></label><button className="secondary-button" disabled={liveBusy || !operatorToken.trim()} onClick={requestLiveProposal}>{liveBusy ? 'Thinking…' : 'Ask live AI'}</button>{liveBusy && <button className="secondary-button" onClick={() => { liveAbort.current?.abort(); liveAbort.current = null; setLiveBusy(false); setLiveStatus('Live request cancelled. Your room is unchanged.') }}>Cancel request</button>}</details>
       {liveProposal && <div className="proposal-card"><div><span className="panel-kicker">{liveProposal.mode === 'prepared' ? 'PREPARED INTERPRETATION' : 'VALIDATED LIVE PROPOSAL'}</span><strong>{liveProposal.interpretation}</strong><span>{liveProposal.law.targets.map(displayName).join(', ')}</span></div><div className="proposal-actions"><button className="freeze-button" disabled={!worldReady} onClick={applyLiveProposal}>Apply proposal</button><button className="secondary-button" onClick={() => setLiveProposal(null)}>Discard</button></div></div>}
     </section>
 
