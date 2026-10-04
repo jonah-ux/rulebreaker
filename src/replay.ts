@@ -16,6 +16,11 @@ export function upsertReplayCheckpoint(current: ReplayCheckpoint[], snapshot: Ex
 }
 
 export function checkpointAtIndex(checkpoints: ReplayCheckpoint[], index: number) {
-  if (checkpoints.length === 0) return null
+  if (checkpoints.length === 0 || !Number.isFinite(index)) return null
   return checkpoints[Math.min(Math.max(index, 0), checkpoints.length - 1)] ?? null
+}
+
+// Browsing never deletes recorded history. Only continuing/mutating commits a branch.
+export function branchReplay(checkpoints: ReplayCheckpoint[], tick: number) {
+  return checkpoints.filter(checkpoint => checkpoint.tick <= tick)
 }

@@ -5,6 +5,7 @@ const coordinate = z.number().finite().min(-16).max(16)
 const finiteVectorComponent = z.number().finite().min(-100).max(100)
 const vector3 = z.tuple([finiteVectorComponent, finiteVectorComponent, finiteVectorComponent])
 const quaternion = z.tuple([finiteVectorComponent, finiteVectorComponent, finiteVectorComponent, finiteVectorComponent])
+  .refine(values => Math.abs(Math.hypot(...values) - 1) < 0.001, 'rotation must be a unit quaternion')
 const targets = z.array(id).min(1).max(24).refine(values => new Set(values).size === values.length, 'law targets must be unique')
 
 export const SceneSchema = z.object({
@@ -110,5 +111,11 @@ export function validateExperiment(scene: Scene, value: unknown): Experiment {
   if (experiment.collisionNoteLaw) validateLaw(scene, experiment.collisionNoteLaw)
   if (experiment.pendingEvents.some(event => event.type === 'collision-note' && ((event.first !== 'room' && !expectedIds.has(event.first)) || (event.second !== 'room' && !expectedIds.has(event.second))))) throw new Error('experiment event refers to an unknown object')
   if (experiment.pendingEvents.some(event => event.type !== 'collision-note' && !expectedIds.has(event.target))) throw new Error('experiment freeze event refers to an unknown object')
+  if (experiment.pendingEvents.some(event => event.type === 'collision-note' && event.tick > experiment.tick)) throw new Error('experiment event is ahead of the simulation clock')
+  const validPair = (key: string) => {
+    const ids = key.split('|')
+    return ids.length === 2 && ids[0] !== ids[1] && ids.every(id => id === 'room' || expectedIds.has(id)) && [...ids].sort().join('|') === key
+  }
+  if (new Set(experiment.noteCooldowns.map(([key]) => key)).size !== experiment.noteCooldowns.length || experiment.noteCooldowns.some(([key, tick]) => !validPair(key) || tick > experiment.tick)) throw new Error('experiment collision cooldowns are invalid')
   return experiment
 }

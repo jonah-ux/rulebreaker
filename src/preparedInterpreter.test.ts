@@ -16,4 +16,9 @@ describe('prepared natural-language interpreter', () => {
     expect(() => interpretPreparedPrompt('hold this object still', sample)).toThrow('Select an object first')
     expect(() => interpretPreparedPrompt('make the ceiling sing opera', sample)).toThrow(PreparedInterpreterError)
   })
+  it('refuses substring matches, negated instructions, and ambiguous combinations', () => {
+    for (const prompt of ['blue pickup truck', 'blue cup on the table', 'every impact creates a playground', 'do not freeze this object', 'blue objects rise and freeze this object']) {
+      expect(() => interpretPreparedPrompt(prompt, sample, 'blue-a')).toThrow(PreparedInterpreterError)
+    }
+  })
 })

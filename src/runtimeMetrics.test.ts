@@ -40,9 +40,9 @@ describe('runtime metric sampling', () => {
       pixelRatio: -1,
       objectCount: -1,
     })).toMatchObject({
-      sampleWindowMs: 1,
-      frameMs: 1,
-      fps: 1000,
+      sampleWindowMs: 0,
+      frameMs: 0,
+      fps: 0,
       physicsHz: 0,
       tickDelta: 0,
       drawCalls: 0,

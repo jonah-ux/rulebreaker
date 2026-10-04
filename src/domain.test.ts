@@ -162,6 +162,11 @@ describe('typed law boundary', () => {
       expect(() => simulation.restore({ ...snapshot, schema: 'rulebreaker/experiment/v0' })).toThrow()
       expect(() => simulation.restore({ ...snapshot, bodies: snapshot.bodies.map((body, index) => index === 0 ? { ...body, id: 'missing' } : body) })).toThrow()
       expect(() => simulation.restore({ ...snapshot, bodies: [...snapshot.bodies, snapshot.bodies[0]] })).toThrow()
+      for (const rotation of [[0, 0, 0, 0], [10, 0, 0, 0]]) {
+        expect(() => simulation.restore({ ...snapshot, bodies: snapshot.bodies.map((body, index) => index === 0 ? { ...body, rotation } : body) })).toThrow()
+      }
+      expect(() => simulation.restore({ ...snapshot, noteCooldowns: [['ghost|room', 0]] })).toThrow()
+      expect(() => simulation.restore({ ...snapshot, noteCooldowns: [['blue-a|room', snapshot.tick + 1]] })).toThrow()
       for (const type of ['freeze-applied', 'freeze-expired']) {
         const event = type === 'freeze-applied' ? { type, target: 'ghost-id', expiresAtTick: 10 } : { type, target: 'ghost-id' }
         expect(() => simulation.restore({ ...snapshot, pendingEvents: [event] })).toThrow()
@@ -182,5 +187,30 @@ describe('typed law boundary', () => {
         expect(notes.every(event => event.maxVoices === maxVoices)).toBe(true)
       } finally { simulation.dispose() }
     }
+  })
+  it('restores pending state without re-emitting historical audio events', async () => {
+    const simulation = await createSimulation(sample)
+    try {
+      const snapshot = simulation.snapshot()
+      const queued = { ...snapshot, pendingEvents: [{ type: 'collision-note' as const, tick: 0, first: 'blue-a', second: 'room', impact: 2, frequency: 220 }] }
+      simulation.restore(queued)
+      expect(simulation.snapshot()).toEqual(queued)
+      expect(simulation.step().filter(event => event.type === 'collision-note')).toEqual([])
+      expect(simulation.snapshot().pendingEvents).toEqual([])
+    } finally { simulation.dispose() }
+  })
+  it('starts a fresh cooldown policy when collision notes are replaced or silenced', async () => {
+    const simulation = await createSimulation(sample)
+    const noteLaw = { schema: 'rulebreaker/law/v1', operation: 'collision-note', targets: allTargets, threshold: 0.5, cooldownTicks: 24, maxVoices: 4 }
+    try {
+      simulation.apply(noteLaw)
+      for (let tick = 0; tick < 90; tick++) simulation.step()
+      expect(simulation.snapshot().noteCooldowns.length).toBeGreaterThan(0)
+      simulation.apply({ ...noteLaw, cooldownTicks: 12 })
+      expect(simulation.snapshot().noteCooldowns).toEqual([])
+      for (let tick = 0; tick < 150; tick++) simulation.step()
+      simulation.clearCollisionNoteLaw()
+      expect(simulation.snapshot().noteCooldowns).toEqual([])
+    } finally { simulation.dispose() }
   })
 })

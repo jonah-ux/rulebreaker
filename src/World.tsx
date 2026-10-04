@@ -47,6 +47,9 @@ type WorldProps = {
   replayRequest: { nonce: number; checkpoint: ReplayCheckpoint } | null
   onCheckpoint: (snapshot: Experiment) => void
   onReplayMarker: (tick: number) => void
+  onReplayRestored: (snapshot: Experiment) => void
+  onReady: (ready: boolean) => void
+  onGoalProgress: (count: number) => void
 }
 
 const BLUE_GRAVITY = (targets: string[], upward: boolean) => ({
@@ -135,6 +138,7 @@ export function World(props: WorldProps) {
     const notifyHistory = () => propsRef.current.onHistoryState(historyRef.current.length > 0, branchRef.current !== null)
     const restoreSnapshot = (snapshot: Experiment) => {
       const restored = simulation.restore(snapshot)
+      selectedRef.current = restored.selectedId
       lastRuleStateRef.current = {
         upward: restored.bodies.filter(body => body.id.startsWith('blue-')).every(body => body.gravityScale === -1),
         collisionNotes: restored.collisionNoteLaw !== null,
@@ -170,6 +174,7 @@ export function World(props: WorldProps) {
       try {
         const current = simulation.snapshot(selectedRef.current)
         const restored = simulation.restore(JSON.parse(importRequest.payload))
+        selectedRef.current = restored.selectedId
         historyRef.current.push(current)
         if (historyRef.current.length > 24) historyRef.current.shift()
         lastRuleStateRef.current = {
@@ -195,6 +200,8 @@ export function World(props: WorldProps) {
     lastReplayRequestNonce.current = replayRequest.nonce
     try {
       const restored = simulation.restore(replayRequest.checkpoint.snapshot)
+      historyRef.current = []
+      propsRef.current.onHistoryState(false, branchRef.current !== null)
       lastRuleStateRef.current = {
         upward: restored.bodies.filter(body => simulation.scene.objects.find(object => object.id === body.id)?.color === 'blue').every(body => body.gravityScale === -1),
         collisionNotes: restored.collisionNoteLaw !== null,
@@ -202,8 +209,7 @@ export function World(props: WorldProps) {
       }
       selectedRef.current = restored.selectedId
       lastCheckpointTick.current = restored.tick
-      propsRef.current.onRestored(restored)
-      propsRef.current.onCheckpoint(restored)
+      propsRef.current.onReplayRestored(restored)
     } catch (error) {
       propsRef.current.onImportResult({ ok: false, message: error instanceof Error ? error.message : 'Replay checkpoint was refused.' })
     }
@@ -249,7 +255,11 @@ export function World(props: WorldProps) {
         return
       }
       simulationRef.current = simulation
+      const cleanups: Array<() => void> = []
+      cleanup = () => { for (const dispose of cleanups.splice(0).reverse()) dispose() }
+      cleanups.push(() => { simulationRef.current = null; readyRef.current = false; simulation.dispose() })
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+      cleanups.push(() => { renderer.dispose(); container.replaceChildren() })
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
       renderer.domElement.setAttribute('aria-label', 'Interactive Rulebreaker physics room. Drag to orbit, scroll to zoom, and click a shape to select it.')
       renderer.domElement.setAttribute('role', 'img')
@@ -257,10 +267,22 @@ export function World(props: WorldProps) {
       renderer.domElement.style.touchAction = 'none'
 
       const scene = new THREE.Scene()
+      cleanups.push(() => {
+        const geometries = new Set<THREE.BufferGeometry>()
+        const materials = new Set<THREE.Material>()
+        scene.traverse(object => {
+          const drawable = object as THREE.Mesh
+          if (drawable.geometry) geometries.add(drawable.geometry)
+          if (drawable.material) for (const material of Array.isArray(drawable.material) ? drawable.material : [drawable.material]) materials.add(material)
+        })
+        for (const geometry of geometries) geometry.dispose()
+        for (const material of materials) material.dispose()
+      })
       scene.background = new THREE.Color('#08131f')
       const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 100)
       camera.position.set(9.5, 7, 12.5)
       const controls = new OrbitControls(camera, renderer.domElement)
+      cleanups.push(() => controls.dispose())
       controls.enableDamping = true
       controls.dampingFactor = 0.08
       controls.minDistance = 5.5
@@ -268,16 +290,24 @@ export function World(props: WorldProps) {
       controls.maxPolarAngle = Math.PI / 2.05
       controls.target.set(0, 4, 0)
       controls.update()
+      controls.listenToKeyEvents(renderer.domElement)
 
       scene.add(new THREE.HemisphereLight(0xc8e8ff, 0x172335, 2.7))
       const sun = new THREE.DirectionalLight(0xffffff, 3.2)
       sun.position.set(4, 12, 8)
       scene.add(sun)
-      const floor = new THREE.GridHelper(16, 16, 0x4a7088, 0x1e3647)
-      floor.position.y = 0
+      const platform = new THREE.Mesh(new THREE.BoxGeometry(16, 0.2, 16), new THREE.MeshStandardMaterial({ color: '#0d2535', roughness: 0.55, metalness: 0.28 }))
+      scene.add(platform)
+      const floor = new THREE.GridHelper(16, 32, 0x72cee9, 0x22475d)
+      floor.position.y = 0.11
       const ceiling = new THREE.GridHelper(16, 16, 0x4a7088, 0x1e3647)
       ceiling.position.y = 10
       scene.add(floor, ceiling)
+      for (const x of [-8, 8]) for (const z of [-8, 8]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.04, 10, 0.04), new THREE.MeshBasicMaterial({ color: '#376a84' }))
+        rail.position.set(x, 5, z)
+        scene.add(rail)
+      }
 
       const colors: Record<string, string> = { blue: '#65c7ff', red: '#ff756f', gold: '#ffc96c' }
       const meshes = simulation.scene.objects.map(object => {
@@ -288,7 +318,7 @@ export function World(props: WorldProps) {
           emissive: colors[object.color],
           emissiveIntensity: 0.06,
         })
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material)
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), material)
         const haloMaterial = new THREE.MeshBasicMaterial({ color: colors[object.color], transparent: true, opacity: 0.8, wireframe: true })
         const halo = new THREE.Mesh(new THREE.SphereGeometry(0.78, 16, 12), haloMaterial)
         halo.visible = false
@@ -305,6 +335,7 @@ export function World(props: WorldProps) {
         camera.updateProjectionMatrix()
       }
       const observer = new ResizeObserver(resize)
+      cleanups.push(() => observer.disconnect())
       observer.observe(container)
       resize()
 
@@ -322,6 +353,7 @@ export function World(props: WorldProps) {
       }
       applyCurrentRules()
       readyRef.current = true
+      propsRef.current.onReady(true)
       lastCheckpointTick.current = simulation.tick
       propsRef.current.onCheckpoint(simulation.snapshot(selectedRef.current))
       propsRef.current.onHistoryState(historyRef.current.length > 0, branchRef.current !== null)
@@ -354,10 +386,15 @@ export function World(props: WorldProps) {
           if (historyRef.current.length > 24) historyRef.current.shift()
           current.onHistoryState(historyRef.current.length > 0, branchRef.current !== null)
           for (const eventItem of simulation.apply(FREEZE(id))) current.onEvent(eventItem)
+          current.onCheckpoint(simulation.snapshot(id))
         }
       }
       renderer.domElement.addEventListener('pointerdown', handlePointerDown)
       renderer.domElement.addEventListener('pointerup', handlePointerUp)
+      cleanups.push(() => {
+        renderer.domElement.removeEventListener('pointerdown', handlePointerDown)
+        renderer.domElement.removeEventListener('pointerup', handlePointerUp)
+      })
 
       let frame = 0
       let previous = performance.now()
@@ -366,9 +403,22 @@ export function World(props: WorldProps) {
       let consumedStepNonce: number | null = null
       let metricWindowStartedAt = previous
       let metricFrameCount = 0
-      let metricStartTick = simulation.tick
+      let metricTickCount = 0
+      let lastTickPublishedAt = 0
+      const advance = () => {
+        const current = propsRef.current
+        const events = simulation.step()
+        metricTickCount += 1
+        for (const event of events) current.onEvent(event)
+        if (events.length > 0) current.onReplayMarker(simulation.tick)
+        if (lastCheckpointTick.current !== simulation.tick && simulation.tick % REPLAY_CHECKPOINT_INTERVAL === 0) {
+          lastCheckpointTick.current = simulation.tick
+          current.onCheckpoint(simulation.snapshot(selectedRef.current))
+        }
+      }
+      cleanups.push(() => cancelAnimationFrame(frame))
       const animate = (now: number) => {
-        accumulator += Math.min((now - previous) / 1000, 0.1)
+        accumulator += document.hidden ? 0 : Math.min((now - previous) / 1000, 0.1)
         previous = now
         const current = propsRef.current
         const requestedStep = current.stepRequest && current.stepRequest.nonce !== consumedStepNonce
@@ -376,26 +426,24 @@ export function World(props: WorldProps) {
           accumulator = 0
           if (requestedStep) {
             consumedStepNonce = current.stepRequest!.nonce
-            const events = simulation.step()
-            for (const event of events) current.onEvent(event)
-            if (events.length > 0) current.onReplayMarker(simulation.tick)
+            advance()
             current.onTick(simulation.tick)
             current.onHeight(simulation.bodies.get('blue-a')!.translation().y)
           }
         } else {
+          if (current.stepRequest) consumedStepNonce = current.stepRequest.nonce
           while (accumulator >= 1 / 60) {
-            const events = simulation.step()
-            for (const event of events) current.onEvent(event)
-            if (events.length > 0) current.onReplayMarker(simulation.tick)
-            current.onTick(simulation.tick)
+            advance()
             accumulator -= 1 / 60
             if (++sampleTicks % 12 === 0) current.onHeight(simulation.bodies.get('blue-a')!.translation().y)
           }
         }
-        if (lastCheckpointTick.current !== simulation.tick && simulation.tick % REPLAY_CHECKPOINT_INTERVAL === 0) {
-          lastCheckpointTick.current = simulation.tick
-          current.onCheckpoint(simulation.snapshot(selectedRef.current))
+        if (!current.paused && now - lastTickPublishedAt >= 100) {
+          current.onTick(simulation.tick)
+          lastTickPublishedAt = now
         }
+        current.onGoalProgress(blueTargets.filter(id => simulation.bodies.get(id)!.translation().y >= 8.8).length)
+        const frozenTargets = simulation.frozenTargets
         for (const { id, mesh, material, halo, haloMaterial } of meshes) {
           const body = simulation.bodies.get(id)!
           const position = body.translation()
@@ -406,7 +454,7 @@ export function World(props: WorldProps) {
           halo.quaternion.copy(mesh.quaternion)
           const selected = selectedRef.current === id
           const inverted = body.gravityScale() < 0
-          const frozen = !body.isMoving()
+          const frozen = frozenTargets.has(id)
           mesh.scale.setScalar(selected ? 1.12 : 1)
           halo.visible = selected
           halo.scale.setScalar(selected ? 1.16 : 1)
@@ -421,7 +469,7 @@ export function World(props: WorldProps) {
           current.onMetrics(summarizeRuntimeWindow({
             elapsedMs: metricElapsedMs,
             frameCount: metricFrameCount,
-            tickDelta: simulation.tick - metricStartTick,
+            tickDelta: metricTickCount,
             drawCalls: renderer.info.render.calls,
             triangles: renderer.info.render.triangles,
             geometries: renderer.info.memory.geometries,
@@ -431,30 +479,19 @@ export function World(props: WorldProps) {
           }))
           metricWindowStartedAt = now
           metricFrameCount = 0
-          metricStartTick = simulation.tick
+          metricTickCount = 0
         }
         frame = requestAnimationFrame(animate)
       }
       frame = requestAnimationFrame(animate)
-      cleanup = () => {
-        cancelAnimationFrame(frame)
-        observer.disconnect()
-        renderer.domElement.removeEventListener('pointerdown', handlePointerDown)
-        renderer.domElement.removeEventListener('pointerup', handlePointerUp)
-        controls.dispose()
-        simulationRef.current = null
-        simulation.dispose()
-        for (const { mesh } of meshes) {
-          mesh.geometry.dispose()
-          mesh.material.dispose()
-        }
-        renderer.dispose()
-        container.replaceChildren()
-      }
     }).catch(error => {
       cleanup()
       cleanup = () => {}
-      if (!canceled) container.textContent = `Scene unavailable: ${error instanceof Error ? error.message : 'unknown error'}`
+      if (!canceled) {
+        propsRef.current.onReady(false)
+        container.setAttribute('role', 'alert')
+        container.textContent = `Scene unavailable: ${error instanceof Error ? error.message : 'unknown error'}. Use Reset to try again.`
+      }
     })
 
     return () => {

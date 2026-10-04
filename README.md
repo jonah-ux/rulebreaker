@@ -1,68 +1,67 @@
 # Rulebreaker
 
-[Source repository](https://github.com/jonah-ux/rulebreaker)
+A physics playground where you can change the rules, inspect the consequences, and rewind to try another path.
 
-A browser laboratory for inspectable laws in a simulated world.
+[Source](https://github.com/jonah-ux/rulebreaker) · [Architecture](docs/ARCHITECTURE.md) · [Release procedure](docs/RELEASE.md)
 
-**Status: the first playable physics, experiment, live-adapter, and prepared-composer slices are shipped in source.** The room, typed laws, object selection, collision-note policy, temporary freeze, undo, branching, local experiment snapshots, no-key natural-language interpretation, event ledger, and server-side provider boundary are available. Live provider behavior is only verified when a real compatible endpoint is configured.
+## Play the Impossible Room
 
-## Try the room
+Your first mission: get both blue shapes to the ceiling. Apply **Blue objects fall upward** and watch the physics engine move them. Red and gold keep falling.
 
-Open the app and use the three prepared laws in the panel:
+- **Listen** turns meaningful impacts into short notes. Enable audio once, and use **Mute audio** whenever you want quiet.
+- **Freeze** holds a selected shape for three seconds of simulation time. Its gravity and other laws remain intact.
+- **Pause room** stops the physics clock. **Step 1 tick** advances one fixed 1/60-second step while paused.
+- **Previous**, **Next**, **Latest**, and the replay slider let you browse recorded physics states. Browsing preserves the future; resuming or applying a law creates a new branch.
 
-- **Blue objects fall upward** scopes inverted gravity to the two blue prisms. Red and gold keep ordinary gravity.
-- **Every collision plays a note** listens for meaningful Rapier collision events. Impacts below 1.2 m/s are ignored, each pair has a 24-tick cooldown, and playback is capped at four voices. Click **Enable audio** once when the browser asks for a gesture.
-- **Click to freeze for three seconds** adds a 180-tick simulation-time freeze. Select a body in the inspector, use the freeze button, or enter click mode and click a shape. The body returns to dynamic motion when the timer expires.
+Drag to orbit, scroll to zoom, and click a shape to select it. The object list also supports keyboard selection. Reduced-motion visitors start with a paused room and can explicitly resume it.
 
-Drag the room to orbit, scroll to zoom, and click a shape to select it. The inspector is keyboard-friendly, and the prepared/live-AI distinction stays visible in the mode card. No model credentials are required.
+Use the prepared composer for “make the blue shapes rise”, “turn impacts into little tones”, or “hold this object still”. It interprets supported phrases locally, shows the affected shapes, and waits for **Apply proposal**. Ambiguous, negated, or unsupported instructions are refused. Compose multiple laws by applying them one at a time.
 
-Use **Undo last law** to return to the previous typed-law state. **Save branch** stores one local timeline point and **Restore branch** returns to it. **Export JSON** writes a `rulebreaker/experiment/v1` document into the inspector; reset the room and use **Import into room** to validate and restore that snapshot.
+**Run Impossible Room demo** takes you through the three laws using the simulation clock. Pausing pauses the demonstration too.
 
-The separate **Live / Provider** panel accepts a natural-language prompt, sends it only through the server-side adapter, validates the returned typed law, and waits for an explicit **Apply proposal** action. With no provider configuration it reports `live provider is not configured; use prepared mode` and leaves the prepared room untouched.
+## Keep an experiment
 
-The same panel has a **Try prepared** path for phrases such as “make the blue shapes rise”, “turn impacts into little tones”, and “hold this object still”. The prepared interpreter never makes a network request. The event ledger below the experiment controls records applied laws, impact notes, freeze expiry, timeline actions, and snapshot restores.
+Open **Experiment tools & diagnostics** to undo a law, save a branch, export/download JSON, or load a saved file. Import is validated before any body changes. A restored experiment pauses so you can inspect it before continuing.
 
-Use **Run Impossible Room demo** to walk through collision notes, inverted blue gravity, and a three-second freeze in one no-key sequence. The final step leaves the controls available so you can invent the variation.
+Snapshots use `rulebreaker/experiment/v1` and preserve body identities, positions, rotations, velocities, gravity, freeze timers, collision policy/cooldowns, and selection. Replay checkpoints use the same format and keep up to 48 recorded states. Timeline browsing clears the old Undo chain; the explicit saved branch remains a separate bookmark. Historical pending events are consumed without duplicate audio playback.
 
-The room also exposes its simulation clock. **Pause room** stops the actual Rapier world while the render stays inspectable; **Step 1 tick** advances exactly one fixed 1/60-second simulation step while paused. The `LIVE · TICK` readout is simulation time, not render-frame count, and pause, resume, and single-step actions are recorded in the event ledger.
+Prepared play makes no model requests. Experiments remain in the current browser unless you deliberately download or share the JSON. There is no account, cloud save, or tracking SDK.
 
-The **Runtime** panel reports measured browser behavior over the latest half-second window: average frame time, measured render FPS, Rapier ticks per second, renderer draw calls and triangles, scene geometry/texture counts, object count, and device pixel ratio. Pausing should drive physics cadence toward zero while render metrics continue sampling; these are local observations for the current browser and machine, not cross-browser performance guarantees.
+## Run locally
 
-The **Replay** panel records a tick-0 checkpoint and another snapshot every 30 Rapier ticks, up to 48 checkpoints. Use **Previous**, **Next**, **Latest**, or the slider to restore a complete historical physics state. Scrubbing pauses the room and discards the abandoned future branch; resume from that point to record a new future. Orange track markers represent ticks where the engine emitted events.
-
-## Start locally
-
-Use Node.js 22.12 or newer and npm. From a clean clone:
+Use Node.js 22.12 or newer and npm:
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Open http://127.0.0.1:5173. Each of the three creative projects uses a different development port.
+Open [localhost:5173](http://127.0.0.1:5173). Build the static application with `npm run build` and inspect it with `npm run preview`.
 
-To exercise the optional OpenAI-compatible adapter, copy `.env.example` to `.env.local` and set `RULEBREAKER_AI_API_KEY`, `RULEBREAKER_AI_BASE_URL`, and `RULEBREAKER_AI_MODEL` before starting the Vite server. Keys are read by the server middleware and are never placed in the browser bundle.
-
-## Checks
+## Verification
 
 ```sh
 npm run verify
 ```
 
-This runs lint, TypeScript, engine/schema checks, and the production build. CI runs the same command after a locked install. Browser/audio acceptance is additional product proof; a build alone is not that proof.
+The gate runs lint, TypeScript, engine/schema/interpreter/replay tests, and a production build. Browser acceptance is a separate release gate; a build is insufficient evidence for physics controls, audio, or deployment. See the [release procedure](docs/RELEASE.md) for the browser and hosting commands.
 
-## Build the product
+## Optional live AI
 
-Start with [AGENTS.md](AGENTS.md), then give an agent the complete [build prompt](docs/BUILD-PROMPT.md). [NEXT-STEPS.md](docs/NEXT-STEPS.md) tracks the delivered physics and experiment slices and the remaining first-release work.
+Live AI is an optional server feature. Prepared interpretation is always the no-key path. Production live requests must remain disabled unless the deployment has an authorized operator access policy; a provider key alone is insufficient.
 
-The next proof gate is a real configured provider completing request → validated law → engine effect. Keep prepared behavior separate from live provider output until that path has been exercised.
+The server adapter converts a bounded prompt and scene into a supported typed law. It never executes model-generated code. The client validates the law again and waits for explicit approval. Secrets belong in the server environment, never in browser variables, JSON experiments, or source. Provider setup and actual provider request → validated law → engine effect are separate acceptance work; this project does not claim them from fixtures.
 
-## Architecture
+## Supported limits
 
-`src/domain.ts` owns scene, law, event, and versioned experiment validation. `src/preparedInterpreter.ts` owns the deterministic no-key natural-language composer and refuses unsupported phrases. `src/simulation.ts` owns the Rapier world, fixed 60 Hz stepping, typed gravity/collision/freeze operations, collision cooldowns, freeze expiry, bounded event output, and atomic snapshot restore. `src/World.tsx` owns the Three.js renderer, orbit controls, raycast selection, and presentation of observed engine state plus history actions. `src/App.tsx` owns prepared law controls, the explicit Web Audio gesture, the local experiment text surface, live proposal approval, and the bounded event ledger. `server/ai.ts` owns bounded OpenAI-compatible requests, cancellation/timeout, and provider-output validation; `vite.config.ts` exposes that route only through the local server middleware. `src/scene.json` is the sample scene.
+- The shipped room contains four rigid bodies, a floor, and a ceiling. The validated schema supports at most 24 bodies.
+- Replay records snapshots, not a complete input log or every internal Rapier contact/solver state. Checkpoint inspection is supported; bit-for-bit future trajectories across browsers or engine versions are not promised.
+- Undo keeps 24 states, replay keeps 48 checkpoints, event history keeps 16 entries, pending engine events are capped at 64, and audio voices follow the approved bounded policy.
+- The runtime inspector reports local frame intervals, physics step counts, renderer counters, and pixel ratio. These are observations of your browser and machine, not benchmark guarantees.
+- The heavy Three.js/Rapier module loads separately from the interface. A large physics chunk remains; mobile/GPU capability affects startup and rendering.
 
-Keep model output as validated data and provider secrets on the server-side adapter. Prepared mode remains independent of credentials; live mode is unavailable until the optional environment is configured. See [architecture](docs/ARCHITECTURE.md).
+## Development and provenance
 
-## Provenance
+Start with [AGENTS.md](AGENTS.md), [NEXT-STEPS.md](docs/NEXT-STEPS.md), and the [build contract](docs/BUILD-PROMPT.md). Keep source, review, merge, deployment, runtime adoption, and live-provider proof distinct.
 
-The project uses the official Vite React/TypeScript template, Three.js, Rapier, Zod, and public dependencies recorded in the lockfile. Original sample data and prepared behavior were authored with AI assistance. Generative-world projects such as [Genie](https://deepmind.google/models/genie/) are a related reference; Rulebreaker's contribution is the inspectable, typed law loop and persistent physics consequences in a small open-source room. [MIT license](LICENSE).
+Built with React, Vite, Three.js, Rapier, Zod, and public dependencies in the lockfile. The sample room and prepared laws were authored with AI assistance. [Genie](https://deepmind.google/models/genie/) is related generative-world work; Rulebreaker focuses on inspectable typed laws and persistent physics consequences. [MIT license](LICENSE).

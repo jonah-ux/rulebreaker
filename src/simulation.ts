@@ -41,10 +41,19 @@ export async function createSimulation(value: unknown) {
   const lastNoteTicks = new Map<string, number>()
   const frozen = new Map<string, FreezeState>()
   const pendingEvents: SimulationEvent[] = []
+  let restoredPendingCount = 0
 
   const emit = (event: SimulationEvent) => {
     pendingEvents.push(event)
-    if (pendingEvents.length > 64) pendingEvents.shift()
+    if (pendingEvents.length > 64) {
+      pendingEvents.shift()
+      restoredPendingCount = Math.max(0, restoredPendingCount - 1)
+    }
+  }
+  const takeEvents = () => {
+    const events = pendingEvents.splice(0).slice(restoredPendingCount)
+    restoredPendingCount = 0
+    return events
   }
 
   const impactSpeed = (first: string | undefined, second: string | undefined) => {
@@ -156,6 +165,8 @@ export async function createSimulation(value: unknown) {
     for (const [key, lastTick] of experiment.noteCooldowns) lastNoteTicks.set(key, lastTick)
     noteSequence = experiment.noteSequence
     pendingEvents.splice(0, pendingEvents.length, ...experiment.pendingEvents)
+    // Preserve snapshot state, but do not play already-recorded events again.
+    restoredPendingCount = pendingEvents.length
     eventQueue.clear()
     world.propagateModifiedBodyPositionsToColliders()
     return experiment
@@ -170,14 +181,13 @@ export async function createSimulation(value: unknown) {
     get frozenTargets() { return new Map(frozen) },
     snapshot,
     restore,
-    clearCollisionNoteLaw: () => { collisionNoteLaw = null },
+    clearCollisionNoteLaw: () => { collisionNoteLaw = null; lastNoteTicks.clear() },
     step: () => {
       world.step(eventQueue)
       tick += 1
       drainCollisionEvents()
       expireFreezes()
-      const events = pendingEvents.splice(0)
-      return events
+      return takeEvents()
     },
     apply: (value: unknown) => {
       const law = validateLaw(scene, value)
@@ -190,6 +200,7 @@ export async function createSimulation(value: unknown) {
         for (const body of selected) body.setGravityScale(law.scale, true)
       } else if (law.operation === 'collision-note') {
         collisionNoteLaw = law
+        lastNoteTicks.clear()
       } else {
         for (const [index, body] of selected.entries()) {
           const target = law.targets[index]
@@ -203,7 +214,7 @@ export async function createSimulation(value: unknown) {
           emit({ type: 'freeze-applied', target, expiresAtTick })
         }
       }
-      return pendingEvents.splice(0)
+      return takeEvents()
     },
     dispose: () => { eventQueue.free(); world.free() },
   }

@@ -14,16 +14,20 @@ export class PreparedInterpreterError extends Error {
   }
 }
 
-const collisionWords = /collision|impact|hit|crash|contact/
-const soundWords = /note|sound|tone|music|play/
-const upwardWords = /upward|up|rise|rising|float|reverse gravity|invert gravity/
-const ordinaryWords = /ordinary|normal|restore gravity|downward/
-const freezeWords = /freeze|hold|stop|pause/
+const collisionWords = /\b(?:collisions?|impacts?|hits?|crashes?|contacts?)\b/
+const soundWords = /\b(?:notes?|sounds?|tones?|music|play)\b/
+const upwardWords = /\b(?:upwards?|up|rise|rising|float|reverse gravity|invert gravity)\b/
+const ordinaryWords = /\b(?:ordinary|normal|restore gravity|downwards?)\b/
+const freezeWords = /\b(?:freeze|hold|stop|pause)\b/
 
 export function interpretPreparedPrompt(prompt: string, value: unknown, selectedId?: string | null): PreparedInterpretation {
   const scene = SceneSchema.parse(value)
   const normalized = prompt.trim().toLowerCase().replace(/[.,!?]/g, ' ')
   if (normalized.length < 3) throw new PreparedInterpreterError('Describe a law first.')
+  if (normalized.length > 500) throw new PreparedInterpreterError('Keep the law prompt under 500 characters.')
+  if (/\b(?:do not|don't|never|not)\b/.test(normalized)) throw new PreparedInterpreterError('Prepared mode needs a direct request. Describe the one change you want to make.')
+  const categories = [collisionWords.test(normalized) && soundWords.test(normalized), freezeWords.test(normalized), /\bblue\b/.test(normalized) && (upwardWords.test(normalized) || ordinaryWords.test(normalized))]
+  if (categories.filter(Boolean).length > 1) throw new PreparedInterpreterError('Apply one law at a time, then compose it with another. Which change should happen first?')
   const blueTargets = scene.objects.filter(object => object.color === 'blue').map(object => object.id)
   const allTargets = scene.objects.map(object => object.id)
 
@@ -48,7 +52,7 @@ export function interpretPreparedPrompt(prompt: string, value: unknown, selected
     })
     return { mode: 'prepared', interpretation: `Freeze ${selectedId} for 180 simulation ticks, then restore dynamic motion.`, law }
   }
-  if (normalized.includes('blue') && (upwardWords.test(normalized) || ordinaryWords.test(normalized))) {
+  if (/\bblue\b/.test(normalized) && (upwardWords.test(normalized) || ordinaryWords.test(normalized))) {
     const scale = ordinaryWords.test(normalized) && !upwardWords.test(normalized) ? 1 : -1
     const law = validateLaw(scene, {
       schema: 'rulebreaker/law/v1',

@@ -37,3 +37,11 @@ The room now records tick-0 and 30-tick Rapier checkpoints in a bounded timeline
 Exercise one configured compatible provider through the browser and record the applied engine effect. The prepared collision sound, temporary interaction rules, experiment loop, and adapter boundary are now part of the engine; keep their provider-free behavior separate from the live-AI path.
 
 Use the complete [build prompt](BUILD-PROMPT.md) for sequencing and acceptance. Finish a coherent vertical slice before adding a platform, accounts, multiplayer, or billing. The no-key prepared mode is an honest baseline; a real configured provider must be exercised separately before live AI is described as verified.
+
+## Production release goal — active (2026-10-04)
+
+The release goal covers the public outcome, not another isolated slice. Integration starts from repaired PR #9 at d2160b1. The release candidate puts the actual room first, adds a physics-observed ceiling mission, keeps advanced diagnostics optional, lazy-loads rendering/physics, and removes external font loading.
+
+Replay browsing preserves future checkpoints; branch commitment occurs on resume/step/law mutation. Periodic capture happens inside the physics loop, historical audio is not re-emitted, invalid quaternion/cooldown imports are refused atomically, and reset cleans the entire graphics/audio lifetime. The guided route uses simulation time and reduced-motion visitors start paused.
+
+Remaining release gates: integrate safe production API/browser CI infrastructure, freeze and independently review the exact candidate, run clean-install and actual browser acceptance, land source through governed merge, deploy to the connected hosting owner, verify the public controls/health/security headers, and record an immutable release plus rollback route. Do not mark this goal complete from local checks or a draft PR.

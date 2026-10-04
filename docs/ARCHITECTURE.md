@@ -22,13 +22,15 @@ The stage control surface exposes that same clock for inspection. `Pause room` c
 
 `runtimeMetrics.ts` summarizes a bounded browser sample window. The renderer loop measures elapsed wall time, rendered frames, Rapier tick delta, and Three.js renderer counters, then publishes one `RuntimeMetrics` value after at least 500 ms. `frameMs` and `fps` describe presentation cadence; `physicsHz` describes engine ticks per second; draw calls, triangles, geometries, textures, object count, and pixel ratio describe the observed local scene budget. The panel intentionally labels these as local measurements rather than a device-independent benchmark.
 
-`replay.ts` keeps the replay layer on the existing `rulebreaker/experiment/v1` snapshot contract. The first checkpoint is tick 0; later checkpoints are captured every 30 simulation ticks and bounded to 48 entries. Restoring a checkpoint calls the same validated `simulation.restore` path used by import and branch restore, then pauses the room. Scrubbing to history removes later checkpoints and event markers so continuing from a historical state creates a new recorded future instead of displaying stale predictions. Replay does not make provider requests.
+`replay.ts` keeps the replay layer on the existing `rulebreaker/experiment/v1` snapshot contract. The first checkpoint is tick 0; later checkpoints are captured every 30 simulation ticks and bounded to 48 entries. Restoring a checkpoint calls the same validated `simulation.restore` path used by import and branch restore, then pauses the room. Browsing preserves all retained checkpoints. Only resuming, stepping, or changing a law commits the historical branch and removes its abandoned future. Browsing clears the old Undo chain, while the explicit saved branch remains a separate bookmark. Periodic checkpoints are captured inside each physics step so a render frame spanning several ticks cannot skip an interval boundary. Replay does not make provider requests.
+
+Replacement collision-note policies and explicit silence clear the previous policy's cooldown map.
 
 The sample scene keeps its dynamic bodies awake so gravity changes can affect objects after they settle against a boundary. Sleeping-body optimization and cross-browser determinism remain outside this slice.
 
 ## Experiment format and history
 
-`rulebreaker/experiment/v1` records the scene identity, `rulebreaker/engine/v1`, simulation tick, every body's transform/velocity/gravity scale, freeze expiry, the active collision-note law, pending events, cooldown map, note sequence, and the selected object. `simulation.restore` validates the whole document and all references before changing a body. Undo and branch restore use the same restore path, so they do not call a model or replay audio. The UI keeps a bounded local history of 24 snapshots and one branch point. Export/import is local JSON; it is not a cloud save or a cross-browser determinism claim.
+`rulebreaker/experiment/v1` records the scene identity, `rulebreaker/engine/v1`, simulation tick, every body's transform/velocity/gravity scale, freeze expiry, the active collision-note law, pending events, cooldown map, note sequence, and the selected object. `simulation.restore` validates the whole document and all references before changing a body. Undo and branch restore use the same restore path, so they do not call a model. Pending events stored in a historical snapshot remain inspectable immediately after restore, but are consumed without re-emission so historical sounds do not play twice. The UI keeps a bounded local history of 24 snapshots and one branch point. Export/import is local JSON; it is not a cloud save or a cross-browser determinism claim.
 
 ## Live AI seam
 
@@ -37,3 +39,9 @@ The sample scene keeps its dynamic bodies awake so gravity changes can affect ob
 ## Scope
 
 The project does not implement the complete docs/BUILD-PROMPT.md. docs/NEXT-STEPS.md lists the remaining proof work. A local dev server is not a public deployment, and a configured adapter is not live-provider proof until a real request produces an applied engine effect.
+
+## Presentation and resource lifetime
+
+The room is lazy-loaded behind a recoverable loading/error boundary. A fixed 60 Hz simulation advances independently of render rate; hidden tabs do not accumulate physics work. UI clock publication is sampled rather than rendering the entire React tree every physics tick. The guided route advances on engine ticks, and reduced-motion visitors start paused.
+
+Reset/navigation dispose every scene geometry and material (including grids/selection halos), camera listeners, resize observation, the renderer, and the Rapier world. App teardown aborts provider work and closes Web Audio. Reset stops active notes and invalidates in-flight requests; stale provider responses cannot replace a newer prepared proposal.
