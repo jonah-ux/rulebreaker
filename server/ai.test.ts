@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LiveProviderError, interpretLaw, liveAiAvailability, MAX_PROVIDER_OUTPUT_TOKENS } from './ai.js'
+import { LiveProviderError, interpretLaw, liveAiAvailability, MAX_PROVIDER_OUTPUT_TOKENS, MAX_PROVIDER_RESPONSE_BYTES } from './ai.js'
 
 const sample = {
   schema: 'rulebreaker/scene/v1' as const,
@@ -75,5 +75,20 @@ describe('live law adapter boundary', () => {
       fetcher: async () => { called = true; return new Response('{}') },
     })).rejects.toThrow('cancelled')
     expect(called).toBe(false)
+  })
+  it('cancels oversized provider streams before buffering or accepting a proposal', async () => {
+    for (const declared of [false, true]) {
+      let cancelled = false
+      const body = new ReadableStream({
+        start(controller) { controller.enqueue(new Uint8Array(MAX_PROVIDER_RESPONSE_BYTES + 1)) },
+        cancel() { cancelled = true },
+      })
+      await expect(interpretLaw({ prompt: 'make blue objects rise', scene: sample }, {
+        environment,
+        operatorToken: environment.RULEBREAKER_OPERATOR_BEARER_TOKEN,
+        fetcher: async () => new Response(body, { headers: declared ? { 'content-length': String(MAX_PROVIDER_RESPONSE_BYTES + 1) } : {} }),
+      })).rejects.toThrow('output limit')
+      expect(cancelled).toBe(true)
+    }
   })
 })

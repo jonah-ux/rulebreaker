@@ -8,6 +8,7 @@ import {
   MAX_PROVIDER_RESPONSE_BYTES,
   MAX_REQUEST_BYTES,
   PROVIDER_TIMEOUT_MS,
+  REQUEST_BODY_TIMEOUT_MS,
   readJsonBody,
   RequestValidationError,
 } from './ai.js'
@@ -74,7 +75,7 @@ function attachDisconnectSignal(request: ApiRequest, response: ApiResponse) {
 }
 
 function errorResponse(error: unknown) {
-  if (error instanceof RequestValidationError) return { status: 400, body: { error: 'request could not be processed', code: 'bad_request' } }
+  if (error instanceof RequestValidationError) return { status: error.status, body: { error: 'request could not be processed', code: error.code } }
   if (error instanceof LiveProviderError) return { status: 502, body: { error: 'live AI request failed; use prepared mode', code: 'provider_unavailable' } }
   return { status: 400, body: { error: 'request could not be processed', code: 'bad_request' } }
 }
@@ -103,13 +104,14 @@ export async function handleInterpret(request: ApiRequest, response: ApiResponse
 
   const disconnect = attachDisconnectSignal(request, response)
   try {
-    const body = await readJsonBody(request)
+    const body = await readJsonBody(request, MAX_REQUEST_BYTES, { signal: disconnect.signal })
     const proposal = await interpretLaw(body, { environment: env, operatorToken, signal: disconnect.signal })
     if (disconnect.disconnected) return
     sendJson(response, 200, proposal)
   } catch (error) {
     if (disconnect.disconnected) return
     const result = errorResponse(error)
+    response.setHeader('connection', 'close')
     sendJson(response, result.status, result.body)
   } finally {
     disconnect.cleanup()
@@ -130,6 +132,7 @@ export function capabilitiesPayload(env = environment()) {
       providerResponseBytes: MAX_PROVIDER_RESPONSE_BYTES,
       providerOutputTokens: MAX_PROVIDER_OUTPUT_TOKENS,
       providerTimeoutMs: PROVIDER_TIMEOUT_MS,
+      requestBodyTimeoutMs: REQUEST_BODY_TIMEOUT_MS,
     },
   }
 }

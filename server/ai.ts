@@ -12,6 +12,7 @@ export const MAX_REQUEST_BYTES = 32 * 1024
 export const MAX_PROVIDER_RESPONSE_BYTES = 32 * 1024
 export const MAX_PROVIDER_OUTPUT_TOKENS = 256
 export const PROVIDER_TIMEOUT_MS = 8_000
+export const REQUEST_BODY_TIMEOUT_MS = 8_000
 export const LIVE_AI_ENABLED_ENV = 'RULEBREAKER_LIVE_AI_ENABLED'
 export const OPERATOR_TOKEN_ENV = 'RULEBREAKER_OPERATOR_BEARER_TOKEN'
 
@@ -39,9 +40,13 @@ export class LiveProviderError extends Error {
 }
 
 export class RequestValidationError extends LiveProviderError {
-  constructor(message: string) {
+  readonly status: 400 | 408 | 413
+  readonly code: string
+  constructor(message: string, status: 400 | 408 | 413 = 400, code = 'bad_request') {
     super(message)
     this.name = 'RequestValidationError'
+    this.status = status
+    this.code = code
   }
 }
 
@@ -128,6 +133,7 @@ function parseProposal(text: string, scene: Scene): { interpretation: string; la
 async function readBoundedResponse(response: Response, limit: number) {
   const declaredLength = response.headers.get('content-length')
   if (declaredLength && Number.isFinite(Number(declaredLength)) && Number(declaredLength) > limit) {
+    await response.body?.cancel('response exceeded the output limit')
     throw new LiveProviderError('live provider response exceeded the output limit')
   }
   if (!response.body) {
@@ -184,7 +190,10 @@ export async function interpretLaw(value: unknown, options: { environment?: Envi
       }),
       signal: controller.signal,
     })
-    if (!response.ok) throw new LiveProviderError('live provider request failed')
+    if (!response.ok) {
+      await response.body?.cancel('provider request failed')
+      throw new LiveProviderError('live provider request failed')
+    }
     const body = await readBoundedResponse(response, MAX_PROVIDER_RESPONSE_BYTES)
     let payload: unknown
     try {
@@ -199,18 +208,36 @@ export async function interpretLaw(value: unknown, options: { environment?: Envi
     if (error instanceof DOMException && error.name === 'AbortError') throw new LiveProviderError('live provider request timed out or was cancelled')
     throw new LiveProviderError('live provider request failed')
   } finally {
+    controller.abort()
     clearTimeout(timeout)
     options.signal?.removeEventListener('abort', abortExternal)
   }
 }
 
-export async function readJsonBody(request: AsyncIterable<Uint8Array>, limit = MAX_REQUEST_BYTES) {
+export async function readJsonBody(request: AsyncIterable<Uint8Array>, limit = MAX_REQUEST_BYTES, options: { signal?: AbortSignal; timeoutMs?: number } = {}) {
   const chunks: Uint8Array[] = []
   let size = 0
-  for await (const chunk of request) {
-    size += chunk.byteLength
-    if (size > limit) throw new RequestValidationError('request body exceeds the 32 KB limit')
-    chunks.push(chunk)
+  if (options.signal?.aborted) throw new RequestValidationError('request was cancelled', 408, 'request_cancelled')
+  let rejectRead: (error: Error) => void = () => {}
+  const interrupted = new Promise<never>((_, reject) => { rejectRead = reject })
+  const abort = () => rejectRead(new RequestValidationError('request was cancelled', 408, 'request_cancelled'))
+  options.signal?.addEventListener('abort', abort, { once: true })
+  const timer = setTimeout(() => rejectRead(new RequestValidationError('request body timed out', 408, 'request_timeout')), options.timeoutMs ?? REQUEST_BODY_TIMEOUT_MS)
+  const iterator = request[Symbol.asyncIterator]()
+  try {
+    while (true) {
+      const next = await Promise.race([iterator.next(), interrupted])
+      if (next.done) break
+      size += next.value.byteLength
+      if (size > limit) throw new RequestValidationError('request body exceeds the 32 KB limit', 413, 'request_too_large')
+      chunks.push(next.value)
+    }
+  } finally {
+    clearTimeout(timer)
+    options.signal?.removeEventListener('abort', abort)
+    // IncomingMessage sockets are closed by the API response on a read error;
+    // returning their iterator here would destroy the socket before the JSON reply.
+    if (!('destroy' in request)) void Promise.resolve(iterator.return?.()).catch(() => {})
   }
   const body = new Uint8Array(size)
   let offset = 0

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it } from 'vitest'
 import { capabilitiesPayload, handleCapabilities, handleHealth, handleInterpret } from './api.js'
-import { MAX_REQUEST_BYTES } from './ai.js'
+import { MAX_REQUEST_BYTES, readJsonBody } from './ai.js'
 
 class FakeRequest extends EventEmitter {
   method: string
@@ -84,5 +84,40 @@ describe('same-origin API boundary', () => {
     expect(response.statusCode).toBe(401)
     expect(response.body).not.toContain('operator-secret')
     expect(response.body).not.toContain(oversized)
+  })
+
+  it('returns a sanitized 413 and closes an authorized oversized request', async () => {
+    const env = { RULEBREAKER_LIVE_AI_ENABLED: 'true', RULEBREAKER_AI_API_KEY: 'provider-secret', RULEBREAKER_OPERATOR_BEARER_TOKEN: 'operator-secret' }
+    const response = new FakeResponse()
+    await handleInterpret(new FakeRequest('POST', 'x'.repeat(MAX_REQUEST_BYTES + 1), 'Bearer operator-secret') as never, response as never, env)
+    expect(response.statusCode).toBe(413)
+    expect(JSON.parse(response.body).code).toBe('request_too_large')
+    expect(response.headers.connection).toBe('close')
+    expect(response.body).not.toContain('secret')
+  })
+
+  it('bounds a stalled body read and cancels before consuming a pre-aborted stream', async () => {
+    let started = false
+    const stalled = { async *[Symbol.asyncIterator]() { started = true; await new Promise(() => {}); yield new Uint8Array() } }
+    const controller = new AbortController()
+    controller.abort()
+    await expect(readJsonBody(stalled, MAX_REQUEST_BYTES, { signal: controller.signal })).rejects.toMatchObject({ code: 'request_cancelled' })
+    expect(started).toBe(false)
+    await expect(readJsonBody(stalled, MAX_REQUEST_BYTES, { timeoutMs: 5 })).rejects.toMatchObject({ status: 408, code: 'request_timeout' })
+  })
+
+  it('finishes a disconnected stalled request and removes listeners without provider work', async () => {
+    class StalledRequest extends FakeRequest {
+      async *[Symbol.asyncIterator]() { await new Promise(() => {}); yield new Uint8Array() }
+    }
+    const request = new StalledRequest('POST', '', 'Bearer operator-secret')
+    const response = new FakeResponse()
+    const env = { RULEBREAKER_LIVE_AI_ENABLED: 'true', RULEBREAKER_AI_API_KEY: 'provider-secret', RULEBREAKER_OPERATOR_BEARER_TOKEN: 'operator-secret' }
+    const pending = handleInterpret(request as never, response as never, env)
+    request.emit('aborted')
+    await pending
+    expect(response.writableEnded).toBe(false)
+    expect(request.listenerCount('aborted')).toBe(0)
+    expect(response.listenerCount('close')).toBe(0)
   })
 })
