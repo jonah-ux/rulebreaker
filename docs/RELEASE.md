@@ -39,7 +39,7 @@ RULEBREAKER_AI_MODEL=gpt-4o-mini
 
 The operator token is supplied per request as `Authorization: Bearer <token>`. A missing or false enable flag returns a disabled response before the request body is read. A missing or incorrect token returns an authorization response before provider work begins. Keep the enable flag false or unset for prepared-only hosting. No credential is stored in source, the browser bundle, or this repository.
 
-The adapter enforces a 32 KiB request-body limit, a 32 KiB provider-response limit, a 256-token provider output cap, and an 8-second timeout. It validates the complete response against the scene and law schema before returning it. Prepared interpretation never calls this route.
+The adapter enforces a 32 KiB request-body limit, an 8-second body-read deadline, a streamed 32 KiB provider-response limit, a 256-token provider output cap, and an 8-second provider timeout. Disconnect interrupts body reading as well as provider work. Oversized requests return a sanitized 413; stalled body reads return 408 and close the connection. It validates the complete response against the scene and law schema before returning it. Prepared interpretation never calls this route.
 
 ## Hosting headers
 
@@ -48,3 +48,17 @@ The adapter enforces a 32 KiB request-body limit, a 32 KiB provider-response lim
 ## Release evidence
 
 Record the exact source commit, the local `npm run verify` result, the desktop/mobile browser result, and the served deployment commit separately. A successful build or Vercel deployment proves source/host behavior only; it does not prove provider adoption or a live AI engine effect. Keep the operator gate closed until a reviewed owner enables it and can read back the intended provider behavior.
+
+## Deploy and roll back
+
+Use the existing Git-linked Vercel project and the authorized maintainer account. Land reviewed source through the repository's merge owner, then test its preview before promoting it. Read `GET /api/health` and compare `revision` to the deployed Git commit; require `prepared: true` and `liveAi: false` for this prepared-only release. Verify the security headers and actual Wasm room in the served browser.
+
+Run the same acceptance suite against a served URL without starting a local server:
+
+```sh
+RULEBREAKER_E2E_BASE_URL=https://<verified-deployment> npm run test:e2e
+```
+
+Record the deployment ID and its exact commit before promotion. `vercel promote <verified-deployment-url> --scope <team>` promotes an existing artifact. For a subsequent release regression, `vercel rollback <previous-good-deployment-url> --scope <team>` selects the recorded previous artifact; read the production health revision again and rerun browser acceptance. On the first release there is no earlier known-good production artifact: use the reviewed release tag to redeploy, or remove traffic through the hosting owner's route. Do not invent a prior rollback target.
+
+CI actions are pinned to owner commit SHAs. Update those pins and the dependency lockfile in a reviewed PR, and rerun the same release gates.

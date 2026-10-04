@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+const deploymentUrl = process.env.RULEBREAKER_E2E_BASE_URL
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -11,7 +12,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: deploymentUrl ?? 'http://127.0.0.1:5173',
     browserName: 'chromium',
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
@@ -23,7 +24,7 @@ export default defineConfig({
     { name: 'chromium-desktop', use: { ...devices['Desktop Chrome'] } },
     { name: 'chromium-mobile', use: { ...devices['Pixel 5'] } },
   ],
-  webServer: {
+  webServer: deploymentUrl ? undefined : {
     command: 'npm run dev',
     url: 'http://127.0.0.1:5173',
     reuseExistingServer: !process.env.CI,
