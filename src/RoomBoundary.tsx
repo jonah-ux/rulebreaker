@@ -7,7 +7,7 @@ export class RoomBoundary extends Component<{ children: ReactNode }, { failed: b
   static getDerivedStateFromError() { return { failed: true } }
 
   render() {
-    if (this.state.failed) return <div className="world world-loading" role="alert"><div><h2>The room could not start</h2><p>Check WebGL support and your connection, then reset the room to try again.</p></div></div>
+    if (this.state.failed) return <div className="world world-loading" role="alert"><div><h2>The room could not start</h2><p>Check WebGL support and your connection, then reload to retry loading the engine.</p><button className="secondary-button" onClick={() => window.location.reload()}>Reload page</button></div></div>
     return this.props.children
   }
 }
