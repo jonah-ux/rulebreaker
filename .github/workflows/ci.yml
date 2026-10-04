@@ -1,13 +1,14 @@
-name: starter checks
+name: verify and browser checks
 on:
   push:
+    branches: [main, 'codex-*']
   pull_request:
 permissions:
   contents: read
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -16,3 +17,23 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run verify
+      - name: Install pinned Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run desktop and mobile browser checks
+        run: npm run test:e2e
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload browser traces and videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
