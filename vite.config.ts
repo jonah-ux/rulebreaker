@@ -1,39 +1,29 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig, type Plugin } from 'vite'
-import { LiveProviderError, interpretLaw, readJsonBody } from './server/ai.js'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
+import { handleCapabilities, handleHealth, handleInterpret } from './server/api.js'
 
-function liveAiApi(): Plugin {
+type Environment = Record<string, string | undefined>
+
+function liveAiApi(environment: Environment): Plugin {
   return {
     name: 'rulebreaker-live-ai-api',
     configureServer(server) {
-      server.middlewares.use('/api/interpret', async (request, response, next) => {
-        if (request.method === 'OPTIONS') {
-          response.statusCode = 204
-          response.end()
-          return
-        }
-        if (request.method !== 'POST') {
-          next()
-          return
-        }
-        try {
-          const proposal = await interpretLaw(await readJsonBody(request))
-          response.statusCode = 200
-          response.setHeader('content-type', 'application/json')
-          response.setHeader('cache-control', 'no-store')
-          response.end(JSON.stringify(proposal))
-        } catch (error) {
-          response.statusCode = error instanceof LiveProviderError ? 502 : 400
-          response.setHeader('content-type', 'application/json')
-          response.setHeader('cache-control', 'no-store')
-          response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'live interpretation failed' }))
-        }
+      server.middlewares.use('/api/interpret', (request, response) => {
+        void handleInterpret(request, response, environment)
+      })
+      server.middlewares.use('/api/capabilities', (request, response) => {
+        handleCapabilities(request, response, environment)
+      })
+      server.middlewares.use('/api/health', (request, response) => {
+        handleHealth(request, response, environment)
       })
     },
   }
 }
 
-// https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), liveAiApi()],
+export default defineConfig(({ mode }) => {
+  const environment = { ...process.env, ...loadEnv(mode, process.cwd(), 'RULEBREAKER_') }
+  return {
+    plugins: [react(), liveAiApi(environment)],
+  }
 })
