@@ -1,11 +1,47 @@
 # First product build
 
-## Starter delivered
+## Physics slice delivered
 
-A real Three.js/Rapier room, four sample objects, a validated gravity law, a reset control, and engine tests.
+A real Three.js/Rapier room with orbit camera controls, four selectable sample objects, a validated gravity law, collision-note events with a threshold/cooldown/voice policy, simulation-tick freeze expiry, visible prepared-law interpretation, explicit sound activation, reset, and engine/schema tests.
+
+## Experiment slice delivered
+
+Versioned `rulebreaker/experiment/v1` snapshots now capture scene identity, physics transforms/velocities, active laws, freeze timers, collision cooldowns, pending events, note sequence, and selection. Undo, one branch, export JSON, reset, and validated import restore the actual room without a provider request. Invalid versions and broken references are refused before mutation.
+
+## Live adapter slice delivered
+
+`server/ai.ts` and the local Vite middleware now provide an optional OpenAI-compatible request path. The UI keeps live proposals separate from prepared mode, requires explicit apply approval, validates the response against the typed law schema, and fails closed when no provider is configured. The real-provider request → validated law → engine effect check is still outstanding until authorized provider configuration is present.
+
+## Guided demo slice delivered
+
+The no-key room now includes a three-step Impossible Room route: collision-note policy, inverted blue gravity, and selected-body freeze. It reports progress live and leaves the prepared controls ready for a variation after completion.
+
+## Composer and ledger slice delivered
+
+The law prompt now supports deterministic no-key interpretations for alternate gravity, collision-note, and freeze phrasing. Proposals remain inspectable until explicit approval. A bounded event ledger records law applications, impact notes, freeze expiry, timeline actions, and snapshot restores so consequences remain visible after motion settles.
+
+## Control-room slice delivered
+
+The stage now exposes pause, resume, and one-tick stepping over the actual Rapier simulation. A visible simulation clock and ledger entries make fixed-step inspection explicit: pause holds the world, each step advances one 1/60-second tick, and resume returns to live accumulation. Browser evidence covers the control sequence; the provider-free boundary remains intact.
+
+## Runtime measurement slice delivered
+
+The control room now samples local browser behavior over bounded half-second windows. It reports frame time, measured FPS, Rapier physics cadence, renderer draw calls/triangles, geometry and texture counts, object count, and device pixel ratio. These measurements are intentionally scoped to the current browser and machine; they are evidence for inspection, not a cross-browser performance claim.
+
+## Replay slice delivered
+
+The room now records tick-0 and 30-tick Rapier checkpoints in a bounded timeline. Previous/next/latest controls and a slider restore the complete validated experiment snapshot, pause the room, show the selected tick, and discard abandoned future checkpoints when the player branches from history. Engine event ticks appear as markers on the replay track; continuing from a checkpoint records a new future without a provider call.
 
 ## First work for the build agent
 
-Add the server-side AI law adapter, collision sound, temporary interaction rules, complete state restore, branching, and experiment import/export.
+Exercise one configured compatible provider through the browser and record the applied engine effect. The prepared collision sound, temporary interaction rules, experiment loop, and adapter boundary are now part of the engine; keep their provider-free behavior separate from the live-AI path.
 
-Use the complete [build prompt](BUILD-PROMPT.md) for sequencing and acceptance. Finish a coherent vertical slice before adding a platform, accounts, multiplayer, or billing. The no-key starter is an honest baseline; a real configured provider must be exercised separately before live AI is described as verified.
+Use the complete [build prompt](BUILD-PROMPT.md) for sequencing and acceptance. Finish a coherent vertical slice before adding a platform, accounts, multiplayer, or billing. The no-key prepared mode is an honest baseline; a real configured provider must be exercised separately before live AI is described as verified.
+
+## Production release goal — active (2026-10-04)
+
+The release goal covers the public outcome, not another isolated slice. Integration starts from repaired PR #9 at d2160b1. The release candidate puts the actual room first, adds a physics-observed ceiling mission, keeps advanced diagnostics optional, lazy-loads rendering/physics, and removes external font loading.
+
+Replay browsing preserves future checkpoints; branch commitment occurs on resume/step/law mutation. Periodic capture happens inside the physics loop, historical audio is not re-emitted, invalid quaternion/cooldown imports are refused atomically, and reset cleans the entire graphics/audio lifetime. The guided route uses simulation time and reduced-motion visitors start paused.
+
+Remaining release gates: integrate safe production API/browser CI infrastructure, freeze and independently review the exact candidate, run clean-install and actual browser acceptance, land source through governed merge, deploy to the connected hosting owner, verify the public controls/health/security headers, and record an immutable release plus rollback route. Do not mark this goal complete from local checks or a draft PR.

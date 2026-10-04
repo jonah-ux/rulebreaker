@@ -10,3 +10,4 @@ dist/
 output/
 playwright-report/
 test-results/
+.vercel/
