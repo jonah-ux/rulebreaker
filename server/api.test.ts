@@ -64,7 +64,7 @@ describe('same-origin API boundary', () => {
     const healthResponse = new FakeResponse()
     handleHealth(healthRequest as never, healthResponse as never)
     expect(healthResponse.statusCode).toBe(200)
-    expect(JSON.parse(healthResponse.body)).toMatchObject({ schema: 'rulebreaker/health/v1', status: 'ok', version: '0.1.0', revision: null })
+    expect(JSON.parse(healthResponse.body)).toMatchObject({ schema: 'rulebreaker/health/v1', status: 'ok', version: '0.2.0', revision: null })
 
     const optionsResponse = new FakeResponse()
     handleCapabilities(new FakeRequest('OPTIONS') as never, optionsResponse as never)

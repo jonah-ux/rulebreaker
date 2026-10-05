@@ -104,6 +104,10 @@ p { color: var(--muted); }
 .import-row { display: flex; align-items: center; gap: 14px; margin-top: 11px; }
 .import-row .freeze-button { width: auto; white-space: nowrap; }
 .import-row span { color: var(--muted); font-size: .72rem; }
+.share-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 12px; align-items: center; margin-top: 16px; }
+.share-row label { color: var(--muted); font-family: ui-monospace, monospace; font-size: .65rem; letter-spacing: .08em; text-transform: uppercase; }
+.share-row input { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: #07131e; color: var(--cyan); font: .72rem ui-monospace, monospace; padding: 10px 11px; }
+.share-row span { grid-column: 2; color: var(--muted); font-size: .72rem; }
 .replay-panel { margin-top: 18px; padding: 25px; }
 .replay-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 10px; }
 .replay-slider { width: 100%; accent-color: var(--cyan); }

@@ -16,7 +16,7 @@ import {
 type ApiRequest = IncomingMessage & AsyncIterable<Uint8Array>
 type ApiResponse = ServerResponse
 type Environment = Record<string, string | undefined>
-const RELEASE_VERSION = '0.1.0'
+const RELEASE_VERSION = '0.2.0'
 
 const jsonHeaders = {
   'content-type': 'application/json; charset=utf-8',

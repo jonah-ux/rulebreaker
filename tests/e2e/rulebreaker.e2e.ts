@@ -62,6 +62,16 @@ test.describe('Rulebreaker browser release surface', () => {
     expect(exported.bodies.find(body => body.id === 'gold-a')?.gravityScale).toBe(1)
     await testInfo.attach('ceiling-experiment', { body: Buffer.from(JSON.stringify(exported, null, 2)), contentType: 'application/json' })
 
+    await diagnostics.getByRole('button', { name: 'Share room state' }).click()
+    const shareLink = diagnostics.getByRole('textbox', { name: 'Share link' })
+    await expect(shareLink).toHaveValue(/#experiment=[A-Za-z0-9_-]+/)
+    const sharedPage = await page.context().newPage()
+    await sharedPage.goto(await shareLink.inputValue())
+    await expect(sharedPage.locator('.share-row')).toContainText('Shared experiment restored')
+    await expect(sharedPage.locator('.object-button').filter({ hasText: 'Blue prism A' })).toContainText('gravity -1')
+    await expect(sharedPage.locator('.clock-state')).toContainText('PAUSED')
+    await sharedPage.close()
+
     const pausedTick = exported.tick
     await expect.poll(async () => readTick(await page.locator('.clock-state').textContent())).toBe(pausedTick)
     await page.getByRole('button', { name: 'Step 1 tick' }).click()
@@ -127,7 +137,7 @@ test.describe('Rulebreaker browser release surface', () => {
     const health = await request.get('/api/health')
     expect(health.status()).toBe(200)
     const healthPayload = await health.json()
-    expect(healthPayload).toMatchObject({ status: 'ok', version: '0.1.0', capabilities: { prepared: true, liveAi: false } })
+    expect(healthPayload).toMatchObject({ status: 'ok', version: '0.2.0', capabilities: { prepared: true, liveAi: false } })
     if (process.env.RULEBREAKER_E2E_EXPECTED_REVISION) expect(healthPayload.revision).toBe(process.env.RULEBREAKER_E2E_EXPECTED_REVISION)
     const anonymous = await request.post('/api/interpret', { data: { prompt: 'blue shapes rise' } })
     expect(anonymous.status()).toBe(503)
