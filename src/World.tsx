@@ -16,6 +16,7 @@ export type { RuntimeMetrics } from './runtimeMetrics'
 type FreezeRequest = { id: string; nonce: number } | null
 type HistoryAction = { type: 'undo' | 'save-branch' | 'restore-branch'; nonce: number } | null
 type ExportRequest = { nonce: number } | null
+type ShareRequest = { nonce: number } | null
 type ImportRequest = { nonce: number; payload: string } | null
 type LawRequest = { nonce: number; law: unknown } | null
 type StepRequest = { nonce: number } | null
@@ -29,6 +30,7 @@ type WorldProps = {
   selectedId: string | null
   historyAction: HistoryAction
   exportRequest: ExportRequest
+  shareRequest: ShareRequest
   importRequest: ImportRequest
   lawRequest: LawRequest
   paused: boolean
@@ -38,6 +40,7 @@ type WorldProps = {
   onEvent: (event: SimulationEvent) => void
   onHistoryState: (canUndo: boolean, hasBranch: boolean) => void
   onExport: (payload: string) => void
+  onShare: (snapshot: Experiment) => void
   onImportResult: (result: RestoreResult) => void
   onLawResult: (result: RestoreResult) => void
   onRestored: (snapshot: Experiment) => void
@@ -88,12 +91,13 @@ export function World(props: WorldProps) {
   const lastHistoryActionNonce = useRef<number | null>(null)
   const lastLawRequestNonce = useRef<number | null>(null)
   const lastExportNonce = useRef<number | null>(null)
+  const lastShareNonce = useRef<number | null>(null)
   const lastImportNonce = useRef<number | null>(null)
   const readyRef = useRef(false)
   const lastReplayRequestNonce = useRef<number | null>(null)
   const lastCheckpointTick = useRef<number | null>(null)
 
-  const { upward, collisionNotes, freezeRequest, historyAction, exportRequest, importRequest, lawRequest, replayRequest, onEvent } = props
+  const { upward, collisionNotes, freezeRequest, historyAction, exportRequest, shareRequest, importRequest, lawRequest, replayRequest, onEvent } = props
 
   useEffect(() => {
     propsRef.current = props
@@ -169,6 +173,10 @@ export function World(props: WorldProps) {
       lastExportNonce.current = exportRequest.nonce
       propsRef.current.onExport(JSON.stringify(simulation.snapshot(selectedRef.current), null, 2))
     }
+    if (shareRequest && shareRequest.nonce !== lastShareNonce.current) {
+      lastShareNonce.current = shareRequest.nonce
+      propsRef.current.onShare(simulation.snapshot(selectedRef.current))
+    }
     if (importRequest && importRequest.nonce !== lastImportNonce.current) {
       lastImportNonce.current = importRequest.nonce
       try {
@@ -192,7 +200,7 @@ export function World(props: WorldProps) {
         propsRef.current.onImportResult({ ok: false, message: error instanceof Error ? error.message : 'Experiment import was refused.' })
       }
     }
-  }, [historyAction, exportRequest, importRequest])
+  }, [historyAction, exportRequest, shareRequest, importRequest])
 
   useEffect(() => {
     const simulation = simulationRef.current

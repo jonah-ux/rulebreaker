@@ -9,6 +9,7 @@ import { SceneSchema, validateLaw } from './domain'
 import type { Experiment, Law } from './domain'
 import { PreparedInterpreterError, interpretPreparedPrompt } from './preparedInterpreter'
 import type { SimulationEvent } from './simulation'
+import { createExperimentShareUrl, decodeExperimentShare, hasExperimentShare } from './share'
 import './App.css'
 
 type AudioWindow = Window & { webkitAudioContext?: typeof AudioContext }
@@ -21,6 +22,16 @@ const objectNames: Record<string, string> = {
   'blue-b': 'Blue prism B',
   'red-a': 'Red prism',
   'gold-a': 'Gold prism',
+}
+
+const DEFAULT_SHARE_STATUS = 'Create a link to this exact room state. It stays local and needs no account.'
+
+function readInitialShare() {
+  if (!hasExperimentShare(window.location.hash)) return { value: null, url: '', status: DEFAULT_SHARE_STATUS }
+  const value = decodeExperimentShare(window.location.hash)
+  return value === null
+    ? { value: null, url: '', status: 'This share link is malformed or incomplete. The room stayed unchanged.' }
+    : { value, url: window.location.href, status: 'Shared experiment found. The room will validate it before restoring anything.' }
 }
 
 function displayName(id: string) {
@@ -47,12 +58,16 @@ export default function App() {
   const [goalProgress, setGoalProgress] = useState(0)
   const [historyAction, setHistoryAction] = useState<{ type: 'undo' | 'save-branch' | 'restore-branch'; nonce: number } | null>(null)
   const [exportRequest, setExportRequest] = useState<{ nonce: number } | null>(null)
+  const [shareRequest, setShareRequest] = useState<{ nonce: number } | null>(null)
   const [importRequest, setImportRequest] = useState<{ nonce: number; payload: string } | null>(null)
   const [lawRequest, setLawRequest] = useState<{ nonce: number; law: unknown } | null>(null)
   const [canUndo, setCanUndo] = useState(false)
   const [hasBranch, setHasBranch] = useState(false)
   const [experimentText, setExperimentText] = useState('')
   const [experimentStatus, setExperimentStatus] = useState('Snapshots include laws, timers, physics state, cooldowns, and selection.')
+  const initialShare = readInitialShare()
+  const [shareUrl, setShareUrl] = useState(initialShare.url)
+  const [shareStatus, setShareStatus] = useState(initialShare.status)
   const [livePrompt, setLivePrompt] = useState('')
   const [liveProposal, setLiveProposal] = useState<LiveProposal | null>(null)
   const [liveStatus, setLiveStatus] = useState('Prepared suggestions stay local. Review, then apply.')
@@ -78,6 +93,9 @@ export default function App() {
   const ledgerId = useRef(0)
   const replayFollow = useRef(true)
   const downloadNextExport = useRef(false)
+  const pendingSharedExperiment = useRef<unknown | null>(initialShare.value)
+  const shareImportPending = useRef(false)
+  const nextNonce = () => { actionNonce.current += 1; return actionNonce.current }
 
   const stopAudio = useCallback(() => {
     for (const oscillator of voiceNodes.current) { try { oscillator.stop() } catch { /* already ended */ } }
@@ -161,7 +179,6 @@ export default function App() {
   }, [addLedgerEntry, playNote])
 
   const selectObject = useCallback((id: string) => setSelectedId(id), [])
-  const nextNonce = () => { actionNonce.current += 1; return actionNonce.current }
   const runHistoryAction = (type: 'undo' | 'save-branch' | 'restore-branch') => {
     setHistoryAction({ type, nonce: nextNonce() })
     addLedgerEntry('restore', `Timeline action · ${type.replace('-', ' ')}`, 'engine snapshot path requested')
@@ -186,8 +203,34 @@ export default function App() {
   }, [addLedgerEntry])
   const handleImportResult = useCallback((result: { ok: boolean; message: string }) => {
     setExperimentStatus(result.message)
+    if (shareImportPending.current) {
+      shareImportPending.current = false
+      setShareStatus(result.ok ? 'Shared experiment restored. Change a law to make this room yours.' : 'Share link refused; the current room stayed unchanged.')
+    }
     addLedgerEntry('restore', result.ok ? 'Experiment imported' : 'Experiment import refused', result.message)
   }, [addLedgerEntry])
+  const handleShare = useCallback((snapshot: Experiment) => {
+    const url = createExperimentShareUrl(snapshot, window.location.href)
+    setShareUrl(url)
+    setExperimentText(JSON.stringify(snapshot, null, 2))
+    setShareStatus('Share link ready. It contains this validated snapshot and no credentials.')
+    const clipboard = navigator.clipboard
+    if (clipboard) void clipboard.writeText(url).then(
+        () => setShareStatus('Share link copied. Anyone with it can open this exact room state.'),
+        () => undefined,
+      )
+    addLedgerEntry('restore', 'Share link created', `validated snapshot at tick ${snapshot.tick}`)
+  }, [addLedgerEntry])
+  const handleWorldReady = useCallback((ready: boolean) => {
+    setWorldReady(ready)
+    if (!ready || pendingSharedExperiment.current === null) return
+    const payload = JSON.stringify(pendingSharedExperiment.current)
+    pendingSharedExperiment.current = null
+    shareImportPending.current = true
+    setExperimentText(payload)
+    actionNonce.current += 1
+    setImportRequest({ nonce: actionNonce.current, payload })
+  }, [])
   const handleLawResult = useCallback((result: { ok: boolean; message: string }) => {
     setLiveStatus(result.message)
     if (result.ok) addLedgerEntry('law', 'Law applied to the engine', result.message)
@@ -305,6 +348,7 @@ export default function App() {
     setLastNote(null)
     setHistoryAction(null)
     setExportRequest(null)
+    setShareRequest(null)
     setImportRequest(null)
     setLawRequest(null)
     setLiveProposal(null)
@@ -321,11 +365,20 @@ export default function App() {
     setReplayMarkers([])
     replayFollow.current = true
     setExperimentStatus('Room reset. Import an experiment snapshot here to restore it.')
+    setShareUrl('')
+    setShareStatus(DEFAULT_SHARE_STATUS)
+    pendingSharedExperiment.current = null
+    shareImportPending.current = false
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
     setLedger([])
     setReset(value => value + 1)
   }
 
   const requestExport = () => setExportRequest({ nonce: nextNonce() })
+  const requestShare = () => {
+    setShareStatus('Creating a validated share link…')
+    setShareRequest({ nonce: nextNonce() })
+  }
   const requestDownload = () => { downloadNextExport.current = true; requestExport() }
   const loadExperimentFile = async (file: File | undefined) => {
     if (!file) return
@@ -453,6 +506,7 @@ export default function App() {
         selectedId={selectedId}
         historyAction={historyAction}
         exportRequest={exportRequest}
+        shareRequest={shareRequest}
         importRequest={importRequest}
         lawRequest={lawRequest}
         onHeight={setHeight}
@@ -460,6 +514,7 @@ export default function App() {
         onEvent={handleEvent}
         onHistoryState={handleHistoryState}
         onExport={handleExport}
+        onShare={handleShare}
         onImportResult={handleImportResult}
         onLawResult={handleLawResult}
         onRestored={handleRestored}
@@ -472,7 +527,7 @@ export default function App() {
         onCheckpoint={handleCheckpoint}
         onReplayMarker={handleReplayMarker}
         onReplayRestored={readSnapshot}
-        onReady={setWorldReady}
+        onReady={handleWorldReady}
         onGoalProgress={setGoalProgress}
       />
       </Suspense></RoomBoundary>
@@ -569,6 +624,12 @@ export default function App() {
         <button className="secondary-button" disabled={!worldReady || !hasBranch} onClick={() => runHistoryAction('restore-branch')}>Restore branch</button>
         <button className="secondary-button" disabled={!worldReady} onClick={requestExport}>Export JSON</button>
         <button className="secondary-button" disabled={!worldReady} onClick={requestDownload}>Download JSON</button>
+        <button className="secondary-button" disabled={!worldReady} onClick={requestShare}>Share room state</button>
+      </div>
+      <div className="share-row">
+        <label htmlFor="share-link">Share link</label>
+        <input id="share-link" aria-label="Share link" readOnly value={shareUrl} placeholder="Create a link after changing the room." onFocus={event => event.currentTarget.select()} />
+        <span role="status">{shareStatus}</span>
       </div>
       <label className="experiment-file">Load a saved experiment <input aria-label="Load experiment file" type="file" accept=".json,application/json" onChange={event => { void loadExperimentFile(event.target.files?.[0]); event.target.value = '' }} /></label>
       <textarea aria-label="Experiment JSON" value={experimentText} onChange={event => setExperimentText(event.target.value)} placeholder="Export a snapshot or paste a rulebreaker/experiment/v1 document here." maxLength={65536} rows={5} />

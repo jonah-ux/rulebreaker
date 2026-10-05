@@ -23,6 +23,8 @@ Use the prepared composer for “make the blue shapes rise”, “turn impacts i
 
 Open **Experiment tools & diagnostics** to undo a law, save a branch, export/download JSON, or load a saved file. Import is validated before any body changes. A restored experiment pauses so you can inspect it before continuing.
 
+Use **Share room state** to create a URL fragment for the exact validated snapshot. The link is copied when the browser permits clipboard access and can be pasted anywhere; opening it restores the room only after the same schema and scene checks used by import. The link contains no provider key, operator token, account, or server-side save.
+
 Snapshots use `rulebreaker/experiment/v1` and preserve body identities, positions, rotations, velocities, gravity, freeze timers, collision policy/cooldowns, and selection. Replay checkpoints use the same format and keep up to 48 recorded states. Timeline browsing clears the old Undo chain; the explicit saved branch remains a separate bookmark. Historical pending events are consumed without duplicate audio playback.
 
 Prepared play makes no model requests. Experiments remain in the current browser unless you deliberately download or share the JSON. There is no account, cloud save, or tracking SDK.
