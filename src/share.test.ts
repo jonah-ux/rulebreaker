@@ -28,7 +28,7 @@ describe('experiment share links', () => {
   it('round-trips a validated experiment through a URL-safe fragment', () => {
     const hash = encodeExperimentShare(experiment)
     expect(hasExperimentShare(hash)).toBe(true)
-    expect(hash).not.toMatch(/[+/=]/u)
+    expect(hash.slice('#experiment='.length)).not.toMatch(/[+/=]/u)
     expect(decodeExperimentShare(hash)).toEqual(experiment)
   })
 
